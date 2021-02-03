@@ -39,3 +39,18 @@ class AbstractI2I(ABC):
             Tensor: [description]
         """
         ...
+
+
+class AbstractGenerator(ABC):
+    @abstractmethod
+    def transform(self, x: Tensor, y: Tensor) -> Tensor:
+        """Transform data to the target label
+
+        Args:
+            x (Tensor): [description]
+            y (Tensor): [description]
+
+        Returns:
+            Tensor: [description]
+        """
+        ...

@@ -2,7 +2,7 @@
 Fixed-Point GAN adapted from Siddiquee et al. (2019)
 """
 from typing import Tuple
-from .abstract_model import AbstractI2I
+from .abstract_model import AbstractI2I, AbstractGenerator
 import torch
 from torch import nn, Tensor
 
@@ -18,7 +18,7 @@ class FPGAN(nn.Module, AbstractI2I):
         ...
 
 
-class Generator(nn.Module):
+class Generator(nn.Module, AbstractGenerator):
     def __init__(self, conv_dim=64, y_dim=1, n_bottleneck_layers=6):
         super().__init__()
         instance_norm = lambda dim: nn.InstanceNorm2d(
@@ -88,6 +88,11 @@ class Generator(nn.Module):
         y = y.repeat(1, 1, x.size(2), x.size(3))
         x = torch.cat([x, y], dim=1)
         return self.layers(x)
+
+    def transform(self, x, y):
+        delta = self.forward(x, y)
+        x_fake = torch.tanh(x + delta)
+        return x_fake
 
 
 class Discriminator(nn.Module):
