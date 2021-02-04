@@ -1,21 +1,115 @@
 """
 Fixed-Point GAN adapted from Siddiquee et al. (2019)
 """
-from typing import Tuple
+from typing import Dict, Tuple
 from .abstract_model import AbstractI2I, AbstractGenerator
 import torch
 from torch import nn, Tensor
+from torch.distributions.distribution import Distribution
+from torch.optim import Optimizer
 
 
 class FPGAN(nn.Module, AbstractI2I):
-    def __init__(self):
+    def __init__(
+        self,
+        image_size: int,
+        label_distribution: Distribution,
+        conv_dim: int = 64,
+        y_dim: int = 1,
+        n_generator_bottleneck_layers: int = 6,
+        n_discriminator_scales: int = 6,
+    ):
         super().__init__()
+        self.label_distribution = label_distribution
+        self.generator = Generator(conv_dim, y_dim, n_generator_bottleneck_layers)
+        self.discriminator = Discriminator(
+            image_size, conv_dim, y_dim, n_discriminator_scales
+        )
+        self.label_dim = y_dim
+        # TODO: hyperparams
+        self.lambda_mse = 1
 
-    def transform(self, x, y):
-        ...
+    def train_step(
+        self,
+        input_image: Tensor,
+        input_label: Tensor,
+        g_optimizer: Optimizer,
+        d_optimizer: Optimizer,
+        skip_generator: bool = False,
+    ) -> Dict[str, float]:
+        def reset_gradients():
+            g_optimizer.zero_grad()
+            d_optimizer.zero_grad()
 
-    def loss(self, input_image, input_label, output_image, output_label):
-        ...
+        target_label = self.label_distribution.sample(
+            (input_image.size(0), self.label_dim)
+        )
+        mse_loss = nn.MSELoss()
+
+        # Discriminator losses with real images
+        sources, labels = self.discriminator(input_image)
+        d_loss_real = -torch.mean(sources)  # Should be 0 (real) for all
+        d_loss_mse = mse_loss(labels, input_label)
+        # Discriminator losses with fake images
+        fake_image = self.generator.transform(input_image, target_label)
+        sources, _ = self.discriminator(fake_image)
+        d_loss_fake = torch.mean(sources)  # Should be 1 (fake) for all
+        ...  # TODO: Gradient penalty?
+        d_loss = d_loss_real + d_loss_fake + self.lambda_mse * d_loss_mse
+        reset_gradients()
+        d_loss.backward()
+        d_optimizer.step()
+        d_losses = {
+            "D/loss": d_loss.item(),
+            "D/loss_mse": d_loss_mse.item(),
+            "D/loss_real": d_loss_real.item(),
+            "D/loss_fake": d_loss_fake.item(),
+        }
+        if skip_generator:
+            return d_losses
+
+        # Input to target
+        fake_image = self.generator.transform(input_image, target_label)
+        sources, labels = self.discriminator(fake_image)
+        g_loss_fake = -torch.mean(sources)
+        g_loss_mse = mse_loss(labels, target_label)
+
+        # Input to input
+        id_image = self.generator.transform(input_image, input_label)
+        sources, labels = self.discriminator(id_image)
+        g_loss_fake_id = -torch.mean(sources)
+        g_loss_mse_id = mse_loss(labels, input_label)
+        g_loss_id = torch.mean(torch.abs(input_image - id_image))
+
+        # Target to input
+        reconstructed_image = self.generator.transform(fake_image, input_label)
+        g_loss_rec = torch.mean(torch.abs(input_image - reconstructed_image))
+
+        # Input to input to input
+        # TODO: Why do they do this?
+        reconstructed_id = self.generator.transform(id_image, input_label)
+        g_loss_rec_id = torch.mean(torch.abs(input_image - reconstructed_id))
+
+        ...  # TODO: Hyperparameters
+        g_loss_same = g_loss_fake_id + g_loss_rec_id + g_loss_mse_id + g_loss_id
+        g_loss = g_loss_fake + g_loss_rec + g_loss_mse + g_loss_same
+
+        reset_gradients()
+        g_loss.backward()
+        g_optimizer.step()
+
+        g_losses = {
+            "G/loss_fake": g_loss_fake.item(),
+            "G/loss_rec": g_loss_rec.item(),
+            "G/loss_mse": g_loss_mse.item(),
+            "G/loss_fake_id": g_loss_fake_id.item(),
+            "G/loss_mse_id": g_loss_mse_id.item(),
+            "G/loss_id": g_loss_id.item(),
+            "G/loss": g_loss.item(),
+            "G/loss_rec_id": g_loss_rec_id.item(),
+        }
+
+        return {**g_losses, **d_losses}
 
 
 class Generator(nn.Module, AbstractGenerator):
