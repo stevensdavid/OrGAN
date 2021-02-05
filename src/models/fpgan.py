@@ -7,6 +7,25 @@ import torch
 from torch import nn, Tensor
 from torch.distributions.distribution import Distribution
 from torch.optim import Optimizer
+from dataclasses import dataclass
+
+
+@dataclass
+class DiscriminatorLoss:
+    classification_real: Tensor
+    classification_fake: Tensor
+    label_error: Tensor
+
+
+@dataclass
+class GeneratorLoss:
+    classification_fake: Tensor
+    label_error: Tensor
+    classification_id: Tensor
+    label_error_id: Tensor
+    id_loss: Tensor
+    reconstruction: Tensor
+    id_reconstruction: Tensor
 
 
 class FPGAN(nn.Module, AbstractI2I):
@@ -28,57 +47,35 @@ class FPGAN(nn.Module, AbstractI2I):
         self.label_dim = y_dim
         # TODO: hyperparams
         self.lambda_mse = 1
+        self.mse = nn.MSELoss()
 
-    def train_step(
-        self,
-        input_image: Tensor,
-        input_label: Tensor,
-        g_optimizer: Optimizer,
-        d_optimizer: Optimizer,
-        skip_generator: bool = False,
-    ) -> Dict[str, float]:
-        def reset_gradients():
-            g_optimizer.zero_grad()
-            d_optimizer.zero_grad()
-
-        target_label = self.label_distribution.sample(
-            (input_image.size(0), self.label_dim)
-        )
-        mse_loss = nn.MSELoss()
-
+    def discriminator_loss(
+        self, input_image: Tensor, input_label: Tensor, target_label: Tensor
+    ) -> DiscriminatorLoss:
         # Discriminator losses with real images
         sources, labels = self.discriminator(input_image)
-        d_loss_real = -torch.mean(sources)  # Should be 0 (real) for all
-        d_loss_mse = mse_loss(labels, input_label)
+        classification_real = -torch.mean(sources)  # Should be 0 (real) for all
+        label_real = self.mse(labels, input_label)
         # Discriminator losses with fake images
         fake_image = self.generator.transform(input_image, target_label)
         sources, _ = self.discriminator(fake_image)
-        d_loss_fake = torch.mean(sources)  # Should be 1 (fake) for all
-        ...  # TODO: Gradient penalty?
-        d_loss = d_loss_real + d_loss_fake + self.lambda_mse * d_loss_mse
-        reset_gradients()
-        d_loss.backward()
-        d_optimizer.step()
-        d_losses = {
-            "D/loss": d_loss.item(),
-            "D/loss_mse": d_loss_mse.item(),
-            "D/loss_real": d_loss_real.item(),
-            "D/loss_fake": d_loss_fake.item(),
-        }
-        if skip_generator:
-            return d_losses
+        classification_fake = torch.mean(sources)  # Should be 1 (fake) for all
+        return DiscriminatorLoss(classification_real, classification_fake, label_real)
 
+    def generator_loss(
+        self, input_image: Tensor, input_label: Tensor, target_label: Tensor
+    ) -> GeneratorLoss:
         # Input to target
         fake_image = self.generator.transform(input_image, target_label)
         sources, labels = self.discriminator(fake_image)
         g_loss_fake = -torch.mean(sources)
-        g_loss_mse = mse_loss(labels, target_label)
+        g_loss_mse = self.mse(labels, target_label)
 
         # Input to input
         id_image = self.generator.transform(input_image, input_label)
         sources, labels = self.discriminator(id_image)
         g_loss_fake_id = -torch.mean(sources)
-        g_loss_mse_id = mse_loss(labels, input_label)
+        g_loss_mse_id = self.mse(labels, input_label)
         g_loss_id = torch.mean(torch.abs(input_image - id_image))
 
         # Target to input
@@ -90,26 +87,15 @@ class FPGAN(nn.Module, AbstractI2I):
         reconstructed_id = self.generator.transform(id_image, input_label)
         g_loss_rec_id = torch.mean(torch.abs(input_image - reconstructed_id))
 
-        ...  # TODO: Hyperparameters
-        g_loss_same = g_loss_fake_id + g_loss_rec_id + g_loss_mse_id + g_loss_id
-        g_loss = g_loss_fake + g_loss_rec + g_loss_mse + g_loss_same
-
-        reset_gradients()
-        g_loss.backward()
-        g_optimizer.step()
-
-        g_losses = {
-            "G/loss_fake": g_loss_fake.item(),
-            "G/loss_rec": g_loss_rec.item(),
-            "G/loss_mse": g_loss_mse.item(),
-            "G/loss_fake_id": g_loss_fake_id.item(),
-            "G/loss_mse_id": g_loss_mse_id.item(),
-            "G/loss_id": g_loss_id.item(),
-            "G/loss": g_loss.item(),
-            "G/loss_rec_id": g_loss_rec_id.item(),
-        }
-
-        return {**g_losses, **d_losses}
+        return GeneratorLoss(
+            g_loss_fake,
+            g_loss_mse,
+            g_loss_fake_id,
+            g_loss_mse_id,
+            g_loss_id,
+            g_loss_rec,
+            g_loss_rec_id,
+        )
 
 
 class Generator(nn.Module, AbstractGenerator):

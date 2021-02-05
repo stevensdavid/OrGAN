@@ -1,23 +1,38 @@
 from abc import ABC, abstractmethod
 from torch import Tensor
-from torch.utils.tensorboard import SummaryWriter
+from util.typing import DataclassType
 
 
 class AbstractI2I(ABC):
     @abstractmethod
-    def train_step(
-        self, input_data: Tensor, input_label: Tensor, g_optimizer, d_optimizer,
-    ) -> Tensor:
+    def discriminator_loss(
+        self, input_image: Tensor, input_label: Tensor, target_label: Tensor
+    ) -> DataclassType:
         """[summary]
 
         Args:
-            input_data (Tensor): [description]
+            input_image (Tensor): [description]
             input_label (Tensor): [description]
-            g_optimizer ([type]): [description]
-            d_optimizer ([type]): [description]
+            target_label (Tensor): [description]
 
         Returns:
-            Tensor: [description]
+            DataclassType: [description]
+        """
+        ...
+
+    @abstractmethod
+    def generator_loss(
+        self, input_image: Tensor, input_label: Tensor, target_label: Tensor
+    ) -> DataclassType:
+        """[summary]
+
+        Args:
+            input_image (Tensor): [description]
+            input_label (Tensor): [description]
+            target_label (Tensor): [description]
+
+        Returns:
+            DataclassType: [description]
         """
         ...
 
