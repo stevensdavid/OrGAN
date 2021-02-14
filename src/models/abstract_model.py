@@ -1,6 +1,7 @@
 from abc import ABC, abstractmethod
 from torch import Tensor
 from util.typing import DataclassType
+from torch.nn.parameter import Parameter
 
 
 class AbstractI2I(ABC):
@@ -35,6 +36,32 @@ class AbstractI2I(ABC):
             DataclassType: [description]
         """
         ...
+
+    @abstractmethod
+    def discriminator_params(self) -> Parameter:
+        """[summary]
+
+        Returns:
+            Parameter: [description]
+        """
+        ...
+
+    @abstractmethod
+    def generator_params(self) -> Parameter:
+        """[summary]
+
+        Returns:
+            Parameter: [description]
+        """
+        ...
+
+    @abstractmethod
+    def save_checkpoint(self) -> None:
+        ...
+
+    @abstractmethod
+    def load_checkpoint(self) -> None:
+        pass
 
 
 class AbstractGenerator(ABC):
