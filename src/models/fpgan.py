@@ -32,14 +32,12 @@ class FPGAN(nn.Module, AbstractI2I):
     def __init__(
         self,
         image_size: int,
-        label_distribution: Distribution,
         conv_dim: int = 64,
         y_dim: int = 1,
         n_generator_bottleneck_layers: int = 6,
         n_discriminator_scales: int = 6,
     ):
         super().__init__()
-        self.label_distribution = label_distribution
         self.generator = Generator(conv_dim, y_dim, n_generator_bottleneck_layers)
         self.discriminator = Discriminator(
             image_size, conv_dim, y_dim, n_discriminator_scales
@@ -48,6 +46,12 @@ class FPGAN(nn.Module, AbstractI2I):
         # TODO: hyperparams
         self.lambda_mse = 1
         self.mse = nn.MSELoss()
+
+    def discriminator_params(self) -> nn.parameter.Parameter:
+        return self.discriminator.parameters()
+
+    def generator_params(self) -> nn.parameter.Parameter:
+        return self.generator.parameters()
 
     def discriminator_loss(
         self, input_image: Tensor, input_label: Tensor, target_label: Tensor
