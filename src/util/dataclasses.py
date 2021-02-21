@@ -15,6 +15,9 @@ class DataclassArithmetic:
     def __add__(self: DataclassType, other: DataclassType):
         return type(self)(*tuple(map(add, astuple(self), astuple(other))))
 
+    def __add__(self: DataclassType, term: float):
+        return type(self)(*tuple(map(lambda x: x + term, astuple(self))))
+
     def __sub__(self: DataclassType, other: DataclassType):
         return type(self)(*tuple(map(sub, astuple(self), astuple(other))))
 
