@@ -70,6 +70,8 @@ async def download_image(image: pd.Series, session: ClientSession):
     target_height = int(args.max_res * min(height / width, 1))
     response = await fetch_img(url, params={"w": target_width, "h": target_height}, session=session)
     img = Image.open(BytesIO(response))
+    if img.mode in ("RGBA", "P"): 
+        img = img.convert("RGB")
     padded = pad_to_square(img)
     return padded
 
