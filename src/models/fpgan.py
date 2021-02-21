@@ -1,24 +1,25 @@
 """
 Fixed-Point GAN adapted from Siddiquee et al. (2019)
 """
-from typing import Dict, Tuple
-from .abstract_model import AbstractI2I, AbstractGenerator
+from typing import Tuple
+from models.abstract_model import AbstractI2I, AbstractGenerator
 import torch
 from torch import nn, Tensor
-from torch.distributions.distribution import Distribution
-from torch.optim import Optimizer
 from dataclasses import dataclass
+from util.dataclasses import DataclassArithmetic
 
 
 @dataclass
-class DiscriminatorLoss:
+class DiscriminatorLoss(DataclassArithmetic):
+    total: Tensor
     classification_real: Tensor
     classification_fake: Tensor
     label_error: Tensor
 
 
 @dataclass
-class GeneratorLoss:
+class GeneratorLoss(DataclassArithmetic):
+    total: Tensor
     classification_fake: Tensor
     label_error: Tensor
     classification_id: Tensor
