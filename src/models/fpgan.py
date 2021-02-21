@@ -6,11 +6,11 @@ from models.abstract_model import AbstractI2I, AbstractGenerator
 import torch
 from torch import nn, Tensor
 from dataclasses import dataclass
-from util.dataclasses import DataclassArithmetic
+from util.dataclasses import DataclassExtensions
 
 
 @dataclass
-class DiscriminatorLoss(DataclassArithmetic):
+class DiscriminatorLoss(DataclassExtensions):
     total: Tensor
     classification_real: Tensor
     classification_fake: Tensor
@@ -18,7 +18,7 @@ class DiscriminatorLoss(DataclassArithmetic):
 
 
 @dataclass
-class GeneratorLoss(DataclassArithmetic):
+class GeneratorLoss(DataclassExtensions):
     total: Tensor
     classification_fake: Tensor
     label_error: Tensor

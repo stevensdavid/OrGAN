@@ -11,7 +11,7 @@ class DataclassType(Protocol):
     __dataclass_fields__: Dict
 
 
-class DataclassArithmetic:
+class DataclassExtensions:
     def __add__(self: DataclassType, other: DataclassType):
         return type(self)(*tuple(map(add, astuple(self), astuple(other))))
 
