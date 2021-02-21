@@ -1,29 +1,28 @@
-from torch.utils.data import DataLoader, Dataset
 import numpy as np
 from enum import Enum, auto
 from math import pi
 import matplotlib.pyplot as plt
 from matplotlib import cm
-from .enums import DataSplit
+from data.abstract_classes import AbstractDataset
+import torch
 import random
 
-
-class CoordinateType(Enum):
-    CARTESIAN = auto()
-    ANGLE = auto()
-
-
-class CircularGaussians(Dataset):
+class CircularGaussians(AbstractDataset):
     def __init__(
         self,
-        coordinate_type: CoordinateType,
-        mode: DataSplit,
+        coordinate_type: str,
+        mode: str,
         n_gaussians: int = 24,
         n_holdout: int = 8,
         points_per_gaussian: int = 50,
         plot:bool=False,
     ) -> None:
         super().__init__()
+        if coordinate_type not in ["cartesian", "angular"]:
+            raise ValueError("Coordinate type must be 'cartesian' or 'angular'")
+        if mode not in ["train", "val"]:
+            raise ValueError("Mode must be 'train' or 'val'")
+        self.coordinate_type = coordinate_type
         points = []
         labels = []
 
@@ -41,13 +40,13 @@ class CircularGaussians(Dataset):
                 points.append(point)
                 labels.append(
                     cartesian_mean
-                    if coordinate_type is CoordinateType.CARTESIAN
+                    if coordinate_type == 'cartesian'
                     else mean
                 )
         random.seed(0)
         holdout_means = random.sample(np.unique(labels), k=n_holdout)
 
-        if mode is DataSplit.TRAIN:
+        if mode == "train":
             self.points = [point for point, label in zip(points, labels) if label not in holdout_means]
             self.labels = [label for label in labels if label not in holdout_means]
         else:
@@ -65,6 +64,12 @@ class CircularGaussians(Dataset):
     def __getitem__(self, index) -> tuple:
         return self.points[index], self.labels[index]
 
+    def random_targets(self, k: int) -> torch.tensor:
+        targets = 2*pi* torch.rand(k)
+        if self.coordinate_type == 'cartesian':
+            targets = torch.stack([torch.cos(targets), torch.sin(targets)])
+        return targets
+
 
 if __name__ == "__main__":
-    CircularGaussians(CoordinateType.ANGLE, plot=True, points_per_gaussian=50)
+    CircularGaussians('angular', plot=True, points_per_gaussian=50)
