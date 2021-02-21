@@ -56,11 +56,11 @@ class AbstractI2I(ABC):
         ...
 
     @abstractmethod
-    def save_checkpoint(self, iteration: int) -> None:
+    def save_checkpoint(self, iteration: int, checkpoint_dir: str) -> None:
         ...
 
     @abstractmethod
-    def load_checkpoint(self, iteration: int) -> None:
+    def load_checkpoint(self, iteration: int, checkpoint_dir: str) -> None:
         ...
 
 
