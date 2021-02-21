@@ -2,6 +2,7 @@ from torch.utils.tensorboard import SummaryWriter
 from dataclasses import asdict
 from pydoc import locate
 import json
+from os.path import join
 
 
 def add_key_prefix(dictionary: dict, prefix: str, separator: str = "/") -> dict:
@@ -30,8 +31,8 @@ class LossLogger:
             self.discriminator_loss = 0
             self.generator_loss = 0
 
-    def save(self, filepath: str):
-        with open(filepath, "w") as f:
+    def save(self, checkpoint_dir: str):
+        with open(join(checkpoint_dir, "loss_logger.json"), "w") as f:
             json.dump(
                 {
                     "generator_loss": asdict(self.generator_loss),
@@ -43,8 +44,8 @@ class LossLogger:
                 f,
             )
 
-    def restore(self, filepath: str):
-        with open(filepath, "r") as f:
+    def restore(self, checkpoint_dir: str):
+        with open(join(checkpoint_dir, "loss_logger.json"), "r") as f:
             checkpoint = json.load(f)
         self.generator_loss = locate(checkpoint["generator_loss_type"])(
             **checkpoint["generator_loss"]
