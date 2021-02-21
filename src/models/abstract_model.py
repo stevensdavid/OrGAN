@@ -56,12 +56,12 @@ class AbstractI2I(ABC):
         ...
 
     @abstractmethod
-    def save_checkpoint(self) -> None:
+    def save_checkpoint(self, iteration: int) -> None:
         ...
 
     @abstractmethod
-    def load_checkpoint(self) -> None:
-        pass
+    def load_checkpoint(self, iteration: int) -> None:
+        ...
 
 
 class AbstractGenerator(ABC):
