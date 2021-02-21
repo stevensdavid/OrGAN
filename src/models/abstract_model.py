@@ -1,6 +1,6 @@
 from abc import ABC, abstractmethod
 from torch import Tensor
-from util.typing import DataclassType
+from util.dataclasses import DataclassType
 from torch.nn.parameter import Parameter
 
 
