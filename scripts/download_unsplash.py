@@ -33,8 +33,8 @@ parser.add_argument("--max_conns", type=int, default=50)
 args = parser.parse_args()
 
 logger.info(
-    f"Downloading images from directory {args.unsplash_dir} to {args.target_dir}" + \
-    f" and scaling to {args.max_res}px. This will take a while."
+    f"Downloading images from directory {args.unsplash_dir} to {args.target_dir}"
+    + f" and scaling to {args.max_res}px. This will take a while."
 )
 
 if not args.y and os.path.exists(args.target_dir):
@@ -44,9 +44,11 @@ if not args.y and os.path.exists(args.target_dir):
         logger.info(f"Clearing {args.target_dir}.")
         shutil.rmtree(args.target_dir)
 
+
 async def fetch_img(url, params, session):
     async with session.get(url, params=params) as response:
         return await response.read()
+
 
 async def download_image(image: pd.Series, session: ClientSession):
     url = image["photo_image_url"]
@@ -55,20 +57,36 @@ async def download_image(image: pd.Series, session: ClientSession):
     # set target side to max 500, otherwise scale to maintain aspect ratio
     target_width = int(args.max_res * min(width / height, 1))
     target_height = int(args.max_res * min(height / width, 1))
-    response = await fetch_img(url, params={"w": target_width, "h": target_height}, session=session)
+    response = await fetch_img(
+        url, params={"w": target_width, "h": target_height}, session=session
+    )
     img = Image.open(BytesIO(response))
-    if img.mode in ("RGBA", "P"): 
+    if img.mode in ("RGBA", "P"):
         img = img.convert("RGB")
     padded = pad_to_square(img)
     return padded
 
+
 logger.info("Loading metadata")
 metadata_files = glob.glob(join(args.unsplash_dir, "photos.tsv*"))
-photos = pd.concat([pd.read_csv(file, sep="\t", header=0) for file in metadata_files], axis=0, ignore_index=True)
-photos = photos[["exif_aperture_value", "photo_id", "photo_image_url", "photo_width", "photo_height"]]
+photos = pd.concat(
+    [pd.read_csv(file, sep="\t", header=0) for file in metadata_files],
+    axis=0,
+    ignore_index=True,
+)
+photos = photos[
+    [
+        "exif_aperture_value",
+        "photo_id",
+        "photo_image_url",
+        "photo_width",
+        "photo_height",
+    ]
+]
 
 labels = {}
 temp_dir = mkdtemp(dir=args.temp_dir)
+
 
 async def process_photo(photo: pd.Series, session: ClientSession):
     try:
@@ -89,6 +107,7 @@ async def process_photo(photo: pd.Series, session: ClientSession):
     except OSError as e:
         logger.error(f"Could not save downloaded photo {photo_id}. Error: {e}")
 
+
 async def download_worker(photo_queue: asyncio.Queue, progbar: tqdm.tqdm):
     async with ClientSession() as session:
         while True:
@@ -102,14 +121,19 @@ async def download_worker(photo_queue: asyncio.Queue, progbar: tqdm.tqdm):
             finally:
                 photo_queue.task_done()
 
+
 async def download_all(temp_dir):
     logger.info("Downloading all photos.")
-    photo_queue = asyncio.Queue()#maxsize=args.max_conns*4)
+    photo_queue = asyncio.Queue()  # maxsize=args.max_conns*4)
     worker_tasks = []
     with tqdm.tqdm(total=len(photos)) as progbar:
         for _ in range(args.max_conns):
-            worker_tasks.append(asyncio.create_task(download_worker(photo_queue, progbar)))
-        for _, photo in tqdm.tqdm(photos.iterrows(), desc="Queuing downloads", total=len(photos)):
+            worker_tasks.append(
+                asyncio.create_task(download_worker(photo_queue, progbar))
+            )
+        for _, photo in tqdm.tqdm(
+            photos.iterrows(), desc="Queuing downloads", total=len(photos)
+        ):
             await photo_queue.put(photo)
         for _ in range(args.max_conns):
             await photo_queue.put(None)
@@ -118,6 +142,7 @@ async def download_all(temp_dir):
         # for task in tqdm.asyncio.tqdm.as_completed(photo_queue, total=len(photos)):
         #     await task
         await asyncio.gather(*worker_tasks)
+
 
 try:
     os.makedirs(join(temp_dir, "images"))
