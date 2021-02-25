@@ -35,11 +35,14 @@ f_stops = {}
 skipped = 0
 aperture_regex = re.compile(r"^-Aperture(?:\n|\r\n)f/(\d+(?:\.\d+)?)$", re.MULTILINE)
 
+
 def process_image(image_idx) -> str:
     image_subdir = str(int(image_idx // 1e4))
     image_filename = f"{image_idx}.jpg"
     exif_filename = f"{image_idx}.txt"
-    with open(join(args.exif_dir, image_subdir, exif_filename), "r", encoding="utf8") as exif_file:
+    with open(
+        join(args.exif_dir, image_subdir, exif_filename), "r", encoding="utf8"
+    ) as exif_file:
         try:
             match = aperture_regex.search(exif_file.read())
         except UnicodeDecodeError:
@@ -54,6 +57,7 @@ def process_image(image_idx) -> str:
     except OSError:
         return None
     return aperture
+
 
 for image in trange(1_000_000, desc="Processing images"):
     aperture = process_image(image)

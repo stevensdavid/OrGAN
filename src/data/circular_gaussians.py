@@ -7,6 +7,7 @@ from data.abstract_classes import AbstractDataset
 import torch
 import random
 
+
 class CircularGaussians(AbstractDataset):
     def __init__(
         self,
@@ -15,7 +16,7 @@ class CircularGaussians(AbstractDataset):
         n_gaussians: int = 24,
         n_holdout: int = 8,
         points_per_gaussian: int = 50,
-        plot:bool=False,
+        plot: bool = False,
     ) -> None:
         super().__init__()
         if coordinate_type not in ["cartesian", "angular"]:
@@ -29,7 +30,9 @@ class CircularGaussians(AbstractDataset):
         rng = np.random.default_rng(seed=0)
         angle_between_means = 2 * pi / n_gaussians
         means = [idx * angle_between_means for idx in range(n_gaussians)]
-        distance_between_means = np.sqrt(2 - 2*np.cos(angle_between_means)) # Law of Cosines
+        distance_between_means = np.sqrt(
+            2 - 2 * np.cos(angle_between_means)
+        )  # Law of Cosines
         # Make distance between means be 8 standard deviations to avoid overlap
         stddev = distance_between_means / 8
         covariance = [[stddev ** 2, 0], [0, stddev ** 2]]
@@ -39,23 +42,29 @@ class CircularGaussians(AbstractDataset):
                 point = rng.multivariate_normal(cartesian_mean, covariance)
                 points.append(point)
                 labels.append(
-                    cartesian_mean
-                    if coordinate_type == 'cartesian'
-                    else mean
+                    cartesian_mean if coordinate_type == "cartesian" else mean
                 )
         random.seed(0)
         holdout_means = random.sample(np.unique(labels), k=n_holdout)
 
         if mode == "train":
-            self.points = [point for point, label in zip(points, labels) if label not in holdout_means]
+            self.points = [
+                point
+                for point, label in zip(points, labels)
+                if label not in holdout_means
+            ]
             self.labels = [label for label in labels if label not in holdout_means]
         else:
-            self.points = [point for point, label in zip(points, labels) if label not in holdout_means]
+            self.points = [
+                point
+                for point, label in zip(points, labels)
+                if label not in holdout_means
+            ]
             self.labels = [label for label in labels if label not in holdout_means]
 
         if plot:
             for point, label in zip(points, labels):
-                plt.scatter(point[0], point[1], c=cm.viridis(label/(2*pi)))
+                plt.scatter(point[0], point[1], c=cm.viridis(label / (2 * pi)))
             plt.show()
 
     def __len__(self) -> int:
@@ -65,11 +74,11 @@ class CircularGaussians(AbstractDataset):
         return self.points[index], self.labels[index]
 
     def random_targets(self, k: int) -> torch.tensor:
-        targets = 2*pi* torch.rand(k)
-        if self.coordinate_type == 'cartesian':
+        targets = 2 * pi * torch.rand(k)
+        if self.coordinate_type == "cartesian":
             targets = torch.stack([torch.cos(targets), torch.sin(targets)])
         return targets
 
 
 if __name__ == "__main__":
-    CircularGaussians('angular', plot=True, points_per_gaussian=50)
+    CircularGaussians("angular", plot=True, points_per_gaussian=50)

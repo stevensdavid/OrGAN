@@ -4,6 +4,7 @@ from inspect import signature
 from pydoc import locate
 from typing import Type
 
+
 def load_yaml(filepath) -> dict:
     with open(filepath) as file:
         configuration = yaml.load(file, loader=yaml.FullLoader)

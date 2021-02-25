@@ -22,4 +22,4 @@ class DataclassExtensions:
         return type(self)(*tuple(map(sub, astuple(self), astuple(other))))
 
     def __truediv__(self: DataclassType, denominator: float):
-        return type(self)(*tuple(map(lambda x: x/denominator, astuple(self))))
+        return type(self)(*tuple(map(lambda x: x / denominator, astuple(self))))
