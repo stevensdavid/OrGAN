@@ -45,7 +45,8 @@ class CircularGaussians(AbstractDataset):
                     cartesian_mean if coordinate_type == "cartesian" else mean
                 )
         random.seed(0)
-        holdout_means = random.sample(np.unique(labels), k=n_holdout)
+        means = np.unique(labels)
+        holdout_means = np.random.choice(means, size=(n_holdout,))
 
         if mode == "train":
             self.points = [
