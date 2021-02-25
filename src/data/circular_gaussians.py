@@ -66,6 +66,10 @@ class CircularGaussians(AbstractDataset):
         if plot:
             for point, label in zip(points, labels):
                 plt.scatter(point[0], point[1], c=cm.viridis(label / (2 * pi)))
+
+            if coordinate_type == "angular":
+                means = [[np.cos(mean), np.sin(mean)] for mean in means]
+            plt.scatter([m[0] for m in means], [m[1] for m in means], marker="wx")
             plt.show()
 
     def __len__(self) -> int:
@@ -82,4 +86,4 @@ class CircularGaussians(AbstractDataset):
 
 
 if __name__ == "__main__":
-    CircularGaussians("angular", plot=True, points_per_gaussian=50)
+    CircularGaussians("angular", plot=True, points_per_gaussian=50, mode="train")
