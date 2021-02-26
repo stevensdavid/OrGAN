@@ -1,35 +1,33 @@
 import numpy as np
-from enum import Enum, auto
 from math import pi
 import matplotlib.pyplot as plt
 from matplotlib import cm
 from data.abstract_classes import AbstractDataset
 import torch
-import random
+from data.enums import DataSplit
 
 
 class CircularGaussians(AbstractDataset):
     def __init__(
         self,
         coordinate_type: str,
-        mode: str,
-        n_gaussians: int = 24,
-        n_holdout: int = 8,
-        points_per_gaussian: int = 50,
+        n_train_clusters: int = 24,
+        n_val_clusters: int = 8,
+        n_test_clusters: int = 8,
+        points_per_cluster: int = 50,
         plot: bool = False,
     ) -> None:
         super().__init__()
         if coordinate_type not in ["cartesian", "angular"]:
             raise ValueError("Coordinate type must be 'cartesian' or 'angular'")
-        if mode not in ["train", "val"]:
-            raise ValueError("Mode must be 'train' or 'val'")
         self.coordinate_type = coordinate_type
         points = []
         labels = []
 
         rng = np.random.default_rng(seed=0)
-        angle_between_means = 2 * pi / n_gaussians
-        means = [idx * angle_between_means for idx in range(n_gaussians)]
+        n_clusters = n_train_clusters + n_test_clusters + n_val_clusters
+        angle_between_means = 2 * pi / n_clusters
+        means = [idx * angle_between_means for idx in range(n_clusters)]
         distance_between_means = np.sqrt(
             2 - 2 * np.cos(angle_between_means)
         )  # Law of Cosines
@@ -38,30 +36,31 @@ class CircularGaussians(AbstractDataset):
         covariance = [[stddev ** 2, 0], [0, stddev ** 2]]
         for mean in means:
             cartesian_mean = [np.cos(mean), np.sin(mean)]
-            for _ in range(points_per_gaussian):
+            for _ in range(points_per_cluster):
                 point = rng.multivariate_normal(cartesian_mean, covariance)
                 points.append(point)
                 labels.append(
                     cartesian_mean if coordinate_type == "cartesian" else mean
                 )
-        random.seed(0)
+        np.random.seed(0)
         means = np.unique(labels)
-        holdout_means = np.random.choice(means, size=(n_holdout,))
+        np.random.shuffle(means)
+        train_means = means[:n_train_clusters]
+        val_means = means[n_train_clusters : n_train_clusters + n_val_clusters]
+        test_means = means[-n_test_clusters:]
 
-        if mode == "train":
-            self.points = [
-                point
-                for point, label in zip(points, labels)
-                if label not in holdout_means
-            ]
-            self.labels = [label for label in labels if label not in holdout_means]
-        else:
-            self.points = [
-                point
-                for point, label in zip(points, labels)
-                if label not in holdout_means
-            ]
-            self.labels = [label for label in labels if label not in holdout_means]
+        self.train_points = [
+            point for point, label in zip(points, labels) if label in train_means
+        ]
+        self.train_labels = [label for label in labels if label in train_means]
+        self.val_points = [
+            point for point, label in zip(points, labels) if label in val_means
+        ]
+        self.val_labels = [label for label in labels if label in val_means]
+        self.test_points = [
+            point for point, label in zip(points, labels) if label in test_means
+        ]
+        self.test_labels = [label for label in labels if label in test_means]
 
         if plot:
             for point, label in zip(points, labels):
@@ -72,11 +71,19 @@ class CircularGaussians(AbstractDataset):
             plt.scatter([m[0] for m in means], [m[1] for m in means], marker="wx")
             plt.show()
 
-    def __len__(self) -> int:
-        return len(self.points)
+    def _len(self) -> int:
+        if self.mode is DataSplit.TRAIN:
+            return len(self.train_points)
+        elif self.mode is DataSplit.VAL:
+            return len(self.val_points)
+        elif self.mode is DataSplit.TEST:
+            return len(self.test_points)
 
-    def __getitem__(self, index) -> tuple:
-        return self.points[index], self.labels[index]
+    def _getitem(self, index) -> tuple:
+        if self.mode is DataSplit.TRAIN:
+            return self.train_points[index], self.train_labels[index]
+        elif self.mode is DataSplit.VAL:
+            return self.val_points[index], self.val_labels[index]
 
     def random_targets(self, k: int) -> torch.tensor:
         targets = 2 * pi * torch.rand(k)
