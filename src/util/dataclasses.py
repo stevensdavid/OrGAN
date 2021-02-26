@@ -1,7 +1,11 @@
+from __future__ import annotations
+
 from operator import add, sub
-from dataclasses import astuple
+from dataclasses import astuple, dataclass
 from typing import Dict
 from typing_extensions import Protocol
+from util.enums import FrequencyMetric
+from util.object_loader import load_yaml
 
 
 class DataclassType(Protocol):
@@ -23,3 +27,15 @@ class DataclassExtensions:
 
     def __truediv__(self: DataclassType, denominator: float):
         return type(self)(*tuple(map(lambda x: x / denominator, astuple(self))))
+
+
+@dataclass
+class TrainingConfig:
+    checkpoint_frequency: int
+    checkpoint_frequency_metric: FrequencyMetric
+    log_frequency: int
+    log_frequency_metric: FrequencyMetric
+
+    @staticmethod
+    def from_yaml(filepath: str) -> TrainingConfig:
+        return TrainingConfig(**load_yaml(filepath))
