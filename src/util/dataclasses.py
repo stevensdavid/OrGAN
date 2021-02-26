@@ -38,4 +38,15 @@ class TrainingConfig:
 
     @staticmethod
     def from_yaml(filepath: str) -> TrainingConfig:
-        return TrainingConfig(**load_yaml(filepath))
+        cfg = load_yaml(filepath)
+        cfg["checkpoint_frequency_metric"] = (
+            FrequencyMetric.ITERATIONS
+            if cfg["checkpoint_frequency_metric"] == "iterations"
+            else FrequencyMetric.EPOCHS
+        )
+        cfg["log_frequency_metric"] = (
+            FrequencyMetric.ITERATIONS
+            if cfg["log_frequency_metric"] == "iterations"
+            else FrequencyMetric.EPOCHS
+        )
+        return TrainingConfig(**cfg)
