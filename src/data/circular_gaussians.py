@@ -4,7 +4,7 @@ import matplotlib.pyplot as plt
 from matplotlib import cm
 from data.abstract_classes import AbstractDataset
 import torch
-from data.enums import DataSplit
+from util.enums import DataSplit
 
 
 class CircularGaussians(AbstractDataset):
