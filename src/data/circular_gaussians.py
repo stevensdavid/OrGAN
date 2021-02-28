@@ -5,6 +5,7 @@ from matplotlib import cm
 from data.abstract_classes import AbstractDataset
 import torch
 from util.enums import DataSplit
+from logging import getLogger
 
 
 class CircularGaussians(AbstractDataset):
@@ -17,13 +18,14 @@ class CircularGaussians(AbstractDataset):
         points_per_cluster: int = 50,
         plot: bool = False,
     ) -> None:
+        self.logger = getLogger("CircularGaussians")
         super().__init__()
         if coordinate_type not in ["cartesian", "angular"]:
             raise ValueError("Coordinate type must be 'cartesian' or 'angular'")
         self.coordinate_type = coordinate_type
         points = []
         labels = []
-
+        self.logger.info("Generating dataset")
         rng = np.random.default_rng(seed=0)
         n_clusters = n_train_clusters + n_test_clusters + n_val_clusters
         angle_between_means = 2 * pi / n_clusters
@@ -61,6 +63,7 @@ class CircularGaussians(AbstractDataset):
             point for point, label in zip(points, labels) if label in test_means
         ]
         self.test_labels = [label for label in labels if label in test_means]
+        self.logger.info("Dataset generation complete.")
 
         if plot:
             for point, label in zip(points, labels):
