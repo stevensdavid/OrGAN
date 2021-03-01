@@ -11,12 +11,12 @@ def load_yaml(filepath) -> dict:
     return configuration
 
 
-def build_from_yaml(filepath: str) -> Any:
+def build_from_yaml(filepath: str, **kwargs) -> Any:
     config = load_yaml(filepath)
-    class_path: str = config["class_path"]
-    class_object: Type = locate(class_path)
+    class_object: Type = locate(config["class"])
+    build_kwargs = {**kwargs, **config["kwargs"]}
     try:
-        instance = class_object(**config.kwargs)
+        instance = class_object(**build_kwargs)
     except TypeError:
         sig = signature(class_object)
         actual_kwargs = config.kwargs.keys()
