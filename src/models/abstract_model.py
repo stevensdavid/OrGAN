@@ -63,6 +63,10 @@ class AbstractI2I(ABC):
     def load_checkpoint(self, iteration: int, checkpoint_dir: str) -> None:
         ...
 
+    @abstractmethod
+    def set_train(self) -> None:
+        ...
+
 
 class AbstractGenerator(ABC):
     @abstractmethod

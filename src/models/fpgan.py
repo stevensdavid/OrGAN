@@ -48,6 +48,10 @@ class FPGAN(nn.Module, AbstractI2I):
         self.lambda_mse = 1
         self.mse = nn.MSELoss()
 
+    def set_train(self):
+        self.generator.train()
+        self.discriminator.train()
+
     def discriminator_params(self) -> nn.parameter.Parameter:
         return self.discriminator.parameters()
 
