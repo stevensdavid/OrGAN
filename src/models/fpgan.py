@@ -150,6 +150,12 @@ class FPGAN(nn.Module, AbstractI2I):
             g_loss_rec_id,
         )
 
+    def save_checkpoint(self, iteration: int, checkpoint_dir: str) -> None:
+        return super().save_checkpoint(iteration, checkpoint_dir)
+
+    def load_checkpoint(self, iteration: int, checkpoint_dir: str) -> None:
+        return super().load_checkpoint(iteration, checkpoint_dir)
+
 
 class Generator(nn.Module, AbstractGenerator):
     def __init__(self, hyperparams: Hyperparams, data_shape: DataShape):
@@ -261,6 +267,8 @@ class Discriminator(nn.Module):
         self.discriminator = nn.Conv2d(
             current_dim, 1, kernel_size=3, stride=1, padding=1, bias=False
         )
+        print(current_dim)
+        print(data_shape.y_dim)
         self.regressor = nn.Conv2d(
             current_dim, data_shape.y_dim, kernel_size=regressor_kernel_size, bias=False
         )
