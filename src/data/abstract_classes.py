@@ -1,7 +1,7 @@
 from torch.utils.data import Dataset
 from abc import ABC, abstractmethod
 from torch import tensor, Size
-from data.enums import DataSplit
+from util.enums import DataSplit
 
 
 class AbstractDataset(Dataset, ABC):
