@@ -6,7 +6,7 @@ from models.abstract_model import AbstractI2I, AbstractGenerator
 import torch
 from torch import nn, Tensor
 from dataclasses import dataclass
-from util.dataclasses import DataclassExtensions
+from util.dataclasses import DataShape, DataclassExtensions
 
 
 @dataclass
@@ -44,15 +44,30 @@ class GeneratorLoss(DataclassExtensions):
 class FPGAN(nn.Module, AbstractI2I):
     def __init__(
         self,
-        image_size: int,
-        hyperparams: Hyperparams,
-        y_dim: int = 1,
+        data_shape: DataShape,
+        g_conv_dim: int,
+        g_num_bottleneck: int,
+        d_conv_dim: int,
+        d_num_scales: int,
+        l_mse: float,
+        l_rec: float,
+        l_id: float,
+        l_grad_penalty: float,
     ):
         super().__init__()
-        self.generator = Generator(hyperparams, y_dim)
-        self.discriminator = Discriminator(image_size, hyperparams, y_dim)
-        self.label_dim = y_dim
-        self.hyperparams = hyperparams
+        self.data_shape = data_shape
+        self.hyperparams = Hyperparams(
+            g_conv_dim=g_conv_dim,
+            g_num_bottleneck=g_num_bottleneck,
+            d_conv_dim=d_conv_dim,
+            d_num_scales=d_num_scales,
+            l_mse=l_mse,
+            l_rec=l_rec,
+            l_id=l_id,
+            l_grad_penalty=l_grad_penalty,
+        )
+        self.generator = Generator(self.hyperparams, self.data_shape)
+        self.discriminator = Discriminator(self.data_shape, self.hyperparams)
         self.mse = nn.MSELoss()
 
     def set_train(self):
@@ -137,7 +152,7 @@ class FPGAN(nn.Module, AbstractI2I):
 
 
 class Generator(nn.Module, AbstractGenerator):
-    def __init__(self, hyperparams: Hyperparams, y_dim=1):
+    def __init__(self, hyperparams: Hyperparams, data_shape: DataShape):
         super().__init__()
         instance_norm = lambda dim: nn.InstanceNorm2d(
             dim, affine=True, track_running_stats=True
@@ -145,7 +160,7 @@ class Generator(nn.Module, AbstractGenerator):
         relu = lambda: nn.ReLU(inplace=True)
         layers = [
             nn.Conv2d(
-                y_dim + 3,
+                data_shape.y_dim + 3,  # TODO: why +3?
                 hyperparams.g_conv_dim,
                 kernel_size=7,
                 stride=1,
@@ -196,7 +211,7 @@ class Generator(nn.Module, AbstractGenerator):
         layers.append(
             nn.Conv2d(
                 current_dim,
-                out_channels=3,
+                out_channels=data_shape.n_channels,
                 kernel_size=7,
                 stride=1,
                 padding=3,
@@ -219,10 +234,16 @@ class Generator(nn.Module, AbstractGenerator):
 
 
 class Discriminator(nn.Module):
-    def __init__(self, image_size, hyperparams: Hyperparams, y_dim=1):
+    def __init__(self, data_shape: DataShape, hyperparams: Hyperparams):
         super().__init__()
         layers = [
-            nn.Conv2d(3, hyperparams.d_conv_dim, kernel_size=4, stride=2, padding=1),
+            nn.Conv2d(
+                data_shape.n_channels,
+                hyperparams.d_conv_dim,
+                kernel_size=4,
+                stride=2,
+                padding=1,
+            ),
             nn.LeakyReLU(0.01),
         ]
         current_dim = hyperparams.d_conv_dim
@@ -235,13 +256,13 @@ class Discriminator(nn.Module):
             ]
             current_dim *= 2
 
-        regressor_kernel_size = image_size // 2 ** hyperparams.d_num_scales
+        regressor_kernel_size = data_shape.x_size // 2 ** hyperparams.d_num_scales
         self.hidden_layers = nn.Sequential(*layers)
         self.discriminator = nn.Conv2d(
             current_dim, 1, kernel_size=3, stride=1, padding=1, bias=False
         )
         self.regressor = nn.Conv2d(
-            current_dim, y_dim, kernel_size=regressor_kernel_size, bias=False
+            current_dim, data_shape.y_dim, kernel_size=regressor_kernel_size, bias=False
         )
 
     def forward(self, x: Tensor) -> Tuple[Tensor, Tensor]:
