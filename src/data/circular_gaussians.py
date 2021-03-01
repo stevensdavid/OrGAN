@@ -43,7 +43,7 @@ class CircularGaussians(AbstractDataset):
                 point = rng.multivariate_normal(cartesian_mean, covariance)
                 points.append(point)
                 labels.append(
-                    cartesian_mean if coordinate_type == "cartesian" else mean
+                    cartesian_mean if coordinate_type == "cartesian" else [mean]
                 )
         np.random.seed(0)
         means = np.unique(labels)
@@ -66,7 +66,7 @@ class CircularGaussians(AbstractDataset):
         self.test_labels = [label for label in labels if label in test_means]
         self.logger.info("Dataset generation complete.")
 
-        self.data_shape = DataShape(
+        self._data_shape = DataShape(
             y_dim=len(labels[0]), x_size=len(points[0]), n_channels=1
         )
 
@@ -100,7 +100,7 @@ class CircularGaussians(AbstractDataset):
         return targets
 
     def data_shape(self) -> DataShape:
-        return self.data_shape
+        return self._data_shape
 
 
 if __name__ == "__main__":
