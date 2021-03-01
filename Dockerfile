@@ -18,8 +18,8 @@ RUN apt-get update && \
    sudo \
    bzip2 \
    libx11-6 \
-   git \
    wget \
+   vim \
    libjpeg-dev \
    libpng-dev && \
    rm -rf /var/lib/apt/lists/*
@@ -72,6 +72,7 @@ WORKDIR $PROJECT_DIR
 
 COPY environment.yml ${PROJECT_DIR}/environment.yml
 
+ENV SHELL=/bin/bash
 
 # build the conda environment
 ENV ENV_PREFIX $PROJECT_DIR/env
@@ -79,7 +80,5 @@ RUN conda update --name base --channel defaults conda && \
    conda env create -f environment.yml && \
    conda clean --all --yes
 
-RUN conda activate pytorch
-RUN conda install pytorch torchvision torchaudio -c pytorch
-
-ENV SHELL=/bin/bash
+# Add code
+COPY . ${PROJECT_DIR}
