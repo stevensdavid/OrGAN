@@ -1,10 +1,14 @@
 from abc import ABC, abstractmethod
 from torch import Tensor
-from util.dataclasses import DataclassType
+from util.dataclasses import DataShape, DataclassType
 from torch.nn.parameter import Parameter
 
 
 class AbstractI2I(ABC):
+    @abstractmethod
+    def __init__(self, data_shape: DataShape, **kwargs) -> None:
+        ...
+
     @abstractmethod
     def discriminator_loss(
         self, input_image: Tensor, input_label: Tensor, target_label: Tensor
