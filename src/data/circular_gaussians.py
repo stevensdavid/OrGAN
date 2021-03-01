@@ -4,6 +4,7 @@ import matplotlib.pyplot as plt
 from matplotlib import cm
 from data.abstract_classes import AbstractDataset
 import torch
+from util.dataclasses import DataShape
 from util.enums import DataSplit
 from logging import getLogger
 
@@ -65,6 +66,10 @@ class CircularGaussians(AbstractDataset):
         self.test_labels = [label for label in labels if label in test_means]
         self.logger.info("Dataset generation complete.")
 
+        self.data_shape = DataShape(
+            y_dim=len(labels[0]), x_size=len(points[0]), n_channels=1
+        )
+
         if plot:
             for point, label in zip(points, labels):
                 plt.scatter(point[0], point[1], c=cm.viridis(label / (2 * pi)))
@@ -93,6 +98,9 @@ class CircularGaussians(AbstractDataset):
         if self.coordinate_type == "cartesian":
             targets = torch.stack([torch.cos(targets), torch.sin(targets)])
         return targets
+
+    def data_shape(self) -> DataShape:
+        return self.data_shape
 
 
 if __name__ == "__main__":

@@ -1,6 +1,7 @@
 from torch.utils.data import Dataset
 from abc import ABC, abstractmethod
 from torch import tensor, Size
+from util.dataclasses import DataShape
 from util.enums import DataSplit
 
 
@@ -34,4 +35,8 @@ class AbstractDataset(Dataset, ABC):
 
     @abstractmethod
     def _getitem(self, index):
+        ...
+
+    @abstractmethod
+    def data_shape(self) -> DataShape:
         ...

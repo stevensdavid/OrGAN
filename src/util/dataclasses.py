@@ -30,6 +30,13 @@ class DataclassExtensions:
 
 
 @dataclass
+class DataShape:
+    y_dim: int
+    n_channels: int
+    x_size: int
+
+
+@dataclass
 class TrainingConfig:
     checkpoint_frequency: int
     checkpoint_frequency_metric: FrequencyMetric
