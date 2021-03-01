@@ -9,7 +9,7 @@ from torch.utils.tensorboard import SummaryWriter
 from os import path
 import torch
 from util.dataclasses import TrainingConfig
-from util.enums import FrequencyMetric
+from util.enums import DataSplit, FrequencyMetric
 
 
 def parse_args() -> Namespace:
@@ -38,7 +38,10 @@ def parse_args() -> Namespace:
 
 def train(args: Namespace):
     dataset: AbstractDataset = build_from_yaml(args.data_config)
-    model: AbstractI2I = build_from_yaml(args.model_config)
+    dataset.set_mode(DataSplit.TRAIN)
+    model: AbstractI2I = build_from_yaml(
+        args.model_config, data_shape=dataset.data_shape()
+    )
     train_conf = TrainingConfig.from_yaml(args.train_config)
     discriminator_opt = Adam(model.discriminator_params())
     generator_opt = Adam(model.generator_params())
