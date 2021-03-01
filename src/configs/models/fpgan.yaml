@@ -1,0 +1,10 @@
+class: models.fpgan.FPGAN
+kwargs:
+  g_conv_dim: 64
+  g_num_bottleneck: 6 
+  d_conv_dim: 64
+  d_num_scales: 6
+  l_mse: 1
+  l_rec: 10
+  l_id: 10
+  l_grad_penalty: 10

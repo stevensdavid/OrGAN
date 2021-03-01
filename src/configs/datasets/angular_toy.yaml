@@ -1,0 +1,8 @@
+class: data.circular_gaussians.CircularGaussians
+kwargs: 
+  coordinate_type: angular
+  n_train_clusters: 24
+  n_val_clusters: 8
+  n_test_clusters: 8
+  points_per_cluster: 50
+  plot: false
