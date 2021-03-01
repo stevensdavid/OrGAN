@@ -18,6 +18,9 @@ def build_from_yaml(filepath: str, **kwargs) -> Any:
     try:
         instance = class_object(**build_kwargs)
     except TypeError as e:
+        error_msg = e.args[0]
+        if not error_msg.startswith("__init__() got an unexpected keyword argument"):
+            raise e
         sig = signature(class_object.__init__)
         actual_kwargs = config["kwargs"].keys()
         expected_kwargs = sig.parameters.keys()
