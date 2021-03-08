@@ -93,7 +93,7 @@ async def process_photo(photo: pd.Series, session: ClientSession):
         f_stop = float(photo["exif_aperture_value"])
     except ValueError:
         return
-    if not isfinite(f_stop) or not (0.5 <= f_stop <= 32):  # Sanity check
+    if not isfinite(f_stop):
         return
     photo_id = photo["photo_id"]
     try:

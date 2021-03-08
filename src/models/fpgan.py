@@ -6,7 +6,19 @@ from models.abstract_model import AbstractI2I, AbstractGenerator
 import torch
 from torch import nn, Tensor
 from dataclasses import dataclass
-from util.dataclasses import DataclassExtensions
+from util.dataclasses import DataShape, DataclassExtensions
+
+
+@dataclass
+class Hyperparams:
+    g_conv_dim: int
+    g_num_bottleneck: int
+    d_conv_dim: int
+    d_num_scales: int
+    l_mse: float
+    l_rec: float
+    l_id: float
+    l_grad_penalty: float
 
 
 @dataclass
@@ -32,21 +44,35 @@ class GeneratorLoss(DataclassExtensions):
 class FPGAN(nn.Module, AbstractI2I):
     def __init__(
         self,
-        image_size: int,
-        conv_dim: int = 64,
-        y_dim: int = 1,
-        n_generator_bottleneck_layers: int = 6,
-        n_discriminator_scales: int = 6,
+        data_shape: DataShape,
+        g_conv_dim: int,
+        g_num_bottleneck: int,
+        d_conv_dim: int,
+        d_num_scales: int,
+        l_mse: float,
+        l_rec: float,
+        l_id: float,
+        l_grad_penalty: float,
     ):
         super().__init__()
-        self.generator = Generator(conv_dim, y_dim, n_generator_bottleneck_layers)
-        self.discriminator = Discriminator(
-            image_size, conv_dim, y_dim, n_discriminator_scales
+        self.data_shape = data_shape
+        self.hyperparams = Hyperparams(
+            g_conv_dim=g_conv_dim,
+            g_num_bottleneck=g_num_bottleneck,
+            d_conv_dim=d_conv_dim,
+            d_num_scales=d_num_scales,
+            l_mse=l_mse,
+            l_rec=l_rec,
+            l_id=l_id,
+            l_grad_penalty=l_grad_penalty,
         )
-        self.label_dim = y_dim
-        # TODO: hyperparams
-        self.lambda_mse = 1
+        self.generator = Generator(self.hyperparams, self.data_shape)
+        self.discriminator = Discriminator(self.data_shape, self.hyperparams)
         self.mse = nn.MSELoss()
+
+    def set_train(self):
+        self.generator.train()
+        self.discriminator.train()
 
     def discriminator_params(self) -> nn.parameter.Parameter:
         return self.discriminator.parameters()
@@ -57,42 +83,64 @@ class FPGAN(nn.Module, AbstractI2I):
     def discriminator_loss(
         self, input_image: Tensor, input_label: Tensor, target_label: Tensor
     ) -> DiscriminatorLoss:
+        # TODO: add gradient penalty
         # Discriminator losses with real images
         sources, labels = self.discriminator(input_image)
         classification_real = -torch.mean(sources)  # Should be 0 (real) for all
-        label_real = self.mse(labels, input_label)
+        label_real = self.hyperparams.l_mse * self.mse(labels, input_label)
         # Discriminator losses with fake images
         fake_image = self.generator.transform(input_image, target_label)
         sources, _ = self.discriminator(fake_image)
         classification_fake = torch.mean(sources)  # Should be 1 (fake) for all
-        return DiscriminatorLoss(classification_real, classification_fake, label_real)
+        total = classification_real + classification_fake + label_real
+        return DiscriminatorLoss(
+            total, classification_real, classification_fake, label_real
+        )
 
     def generator_loss(
         self, input_image: Tensor, input_label: Tensor, target_label: Tensor
     ) -> GeneratorLoss:
+        #   TODO: add gradient penalty
         # Input to target
         fake_image = self.generator.transform(input_image, target_label)
         sources, labels = self.discriminator(fake_image)
         g_loss_fake = -torch.mean(sources)
-        g_loss_mse = self.mse(labels, target_label)
+        g_loss_mse = self.hyperparams.l_mse * self.mse(labels, target_label)
 
         # Input to input
         id_image = self.generator.transform(input_image, input_label)
         sources, labels = self.discriminator(id_image)
         g_loss_fake_id = -torch.mean(sources)
-        g_loss_mse_id = self.mse(labels, input_label)
-        g_loss_id = torch.mean(torch.abs(input_image - id_image))
+        g_loss_mse_id = self.hyperparams.l_mse * self.mse(labels, input_label)
+        g_loss_id = self.hyperparams.l_id * torch.mean(
+            torch.abs(input_image - id_image)
+        )
 
         # Target to input
         reconstructed_image = self.generator.transform(fake_image, input_label)
-        g_loss_rec = torch.mean(torch.abs(input_image - reconstructed_image))
+        g_loss_rec = self.hyperparams.l_rec * torch.mean(
+            torch.abs(input_image - reconstructed_image)
+        )
 
         # Input to input to input
         # TODO: Why do they do this?
         reconstructed_id = self.generator.transform(id_image, input_label)
-        g_loss_rec_id = torch.mean(torch.abs(input_image - reconstructed_id))
+        g_loss_rec_id = self.hyperparams.l_rec * torch.mean(
+            torch.abs(input_image - reconstructed_id)
+        )
+
+        total = (
+            g_loss_fake
+            + g_loss_mse
+            + g_loss_fake_id
+            + g_loss_mse_id
+            + g_loss_id
+            + g_loss_rec
+            + g_loss_rec_id
+        )
 
         return GeneratorLoss(
+            total,
             g_loss_fake,
             g_loss_mse,
             g_loss_fake_id,
@@ -102,9 +150,15 @@ class FPGAN(nn.Module, AbstractI2I):
             g_loss_rec_id,
         )
 
+    def save_checkpoint(self, iteration: int, checkpoint_dir: str) -> None:
+        return super().save_checkpoint(iteration, checkpoint_dir)
+
+    def load_checkpoint(self, iteration: int, checkpoint_dir: str) -> None:
+        return super().load_checkpoint(iteration, checkpoint_dir)
+
 
 class Generator(nn.Module, AbstractGenerator):
-    def __init__(self, conv_dim=64, y_dim=1, n_bottleneck_layers=6):
+    def __init__(self, hyperparams: Hyperparams, data_shape: DataShape):
         super().__init__()
         instance_norm = lambda dim: nn.InstanceNorm2d(
             dim, affine=True, track_running_stats=True
@@ -112,13 +166,18 @@ class Generator(nn.Module, AbstractGenerator):
         relu = lambda: nn.ReLU(inplace=True)
         layers = [
             nn.Conv2d(
-                y_dim + 3, conv_dim, kernel_size=7, stride=1, padding=3, bias=False
+                data_shape.y_dim + 3,  # TODO: why +3?
+                hyperparams.g_conv_dim,
+                kernel_size=7,
+                stride=1,
+                padding=3,
+                bias=False,
             ),
-            instance_norm(conv_dim),
+            instance_norm(hyperparams.g_conv_dim),
             relu(),
         ]
 
-        current_dim = conv_dim
+        current_dim = hyperparams.g_conv_dim
         # Downsampling
         for _ in range(2):
             layers += [
@@ -137,7 +196,7 @@ class Generator(nn.Module, AbstractGenerator):
         # Bottleneck
         layers += [
             _ResBlock(input_dim=current_dim, output_dim=current_dim)
-            for _ in range(n_bottleneck_layers)
+            for _ in range(hyperparams.g_num_bottleneck)
         ]
         # Upsampling
         for _ in range(2):
@@ -158,7 +217,7 @@ class Generator(nn.Module, AbstractGenerator):
         layers.append(
             nn.Conv2d(
                 current_dim,
-                out_channels=3,
+                out_channels=data_shape.n_channels,
                 kernel_size=7,
                 stride=1,
                 padding=3,
@@ -181,14 +240,20 @@ class Generator(nn.Module, AbstractGenerator):
 
 
 class Discriminator(nn.Module):
-    def __init__(self, image_size, conv_dim=64, y_dim=1, n_scales=6):
+    def __init__(self, data_shape: DataShape, hyperparams: Hyperparams):
         super().__init__()
         layers = [
-            nn.Conv2d(3, conv_dim, kernel_size=4, stride=2, padding=1),
+            nn.Conv2d(
+                data_shape.n_channels,
+                hyperparams.d_conv_dim,
+                kernel_size=4,
+                stride=2,
+                padding=1,
+            ),
             nn.LeakyReLU(0.01),
         ]
-        current_dim = conv_dim
-        for _ in range(n_scales):
+        current_dim = hyperparams.d_conv_dim
+        for _ in range(hyperparams.d_num_scales):
             layers += [
                 nn.Conv2d(
                     current_dim, 2 * current_dim, kernel_size=4, stride=2, padding=1
@@ -197,13 +262,15 @@ class Discriminator(nn.Module):
             ]
             current_dim *= 2
 
-        regressor_kernel_size = image_size // 2 ** n_scales
+        regressor_kernel_size = data_shape.x_size // 2 ** hyperparams.d_num_scales
         self.hidden_layers = nn.Sequential(*layers)
         self.discriminator = nn.Conv2d(
             current_dim, 1, kernel_size=3, stride=1, padding=1, bias=False
         )
+        print(current_dim)
+        print(data_shape.y_dim)
         self.regressor = nn.Conv2d(
-            current_dim, y_dim, kernel_size=regressor_kernel_size, bias=False
+            current_dim, data_shape.y_dim, kernel_size=regressor_kernel_size, bias=False
         )
 
     def forward(self, x: Tensor) -> Tuple[Tensor, Tensor]:
