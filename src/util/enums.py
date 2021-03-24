@@ -7,6 +7,6 @@ class DataSplit(Enum):
     TEST = auto()
 
 
-class FrequencyMetric:
+class FrequencyMetric(Enum):
     EPOCHS = auto()
     ITERATIONS = auto()
