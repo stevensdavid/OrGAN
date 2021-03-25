@@ -41,7 +41,9 @@ class CircularGaussians(AbstractDataset):
             cartesian_mean = [np.cos(mean), np.sin(mean)]
             for _ in range(points_per_cluster):
                 point = rng.multivariate_normal(cartesian_mean, covariance)
-                points.append(point)
+                points.append(
+                    [[point[0]], [point[1]]]
+                )  # make 3d to match images, shape is 2x1x1
                 labels.append(
                     cartesian_mean if coordinate_type == "cartesian" else [mean]
                 )
@@ -67,7 +69,7 @@ class CircularGaussians(AbstractDataset):
         self.logger.info("Dataset generation complete.")
 
         self._data_shape = DataShape(
-            y_dim=len(labels[0]), x_size=len(points[0]), n_channels=1
+            y_dim=len(labels[0]), x_size=1, n_channels=len(points[0])
         )
 
         if plot:
@@ -89,9 +91,13 @@ class CircularGaussians(AbstractDataset):
 
     def _getitem(self, index) -> tuple:
         if self.mode is DataSplit.TRAIN:
-            return self.train_points[index], self.train_labels[index]
+            sample, label = self.train_points[index], self.train_labels[index]
         elif self.mode is DataSplit.VAL:
-            return self.val_points[index], self.val_labels[index]
+            sample, label = self.val_points[index], self.val_labels[index]
+        elif self.mode is DataSplit.TEST:
+            sample, label = self.test_points[index], self.test_labels[index]
+        print(sample)
+        return torch.tensor(sample), torch.tensor(label)
 
     def random_targets(self, k: int) -> torch.tensor:
         targets = 2 * pi * torch.rand(k)
