@@ -1,20 +1,23 @@
 from argparse import ArgumentParser, Namespace
-from torch.optim import Adam
+from os import path
+
+import torch
+import wandb
+from data.abstract_classes import AbstractDataset
 from models.abstract_model import AbstractI2I
 from torch.cuda.amp import GradScaler, autocast
-from util.logging import LossLogger
-from util.object_loader import build_from_yaml
-from data.abstract_classes import AbstractDataset
+from torch.optim import Adam
+from torch.utils.data import DataLoader
 from torch.utils.tensorboard import SummaryWriter
-from os import path
-import torch
 from util.dataclasses import TrainingConfig
 from util.enums import DataSplit, FrequencyMetric
+from util.logging import LossLogger
+from util.object_loader import build_from_yaml
 
 
 def parse_args() -> Namespace:
     parser = ArgumentParser()
-    parser.add_argument("--epochs", type=int, help="Training duration")
+    parser.add_argument("--epochs", type=int, help="Training duration", required=True)
     parser.add_argument(
         "--log_dir", type=str, help="TensorBoard log directory", required=True
     )
@@ -28,11 +31,15 @@ def parse_args() -> Namespace:
         "--train_config", type=str, help="Path to training YAML config", required=True
     )
     parser.add_argument(
-        "--checkpoint_dir", type=str, help="Directory to save and load checkpoints from"
+        "--checkpoint_dir",
+        type=str,
+        help="Directory to save and load checkpoints from",
+        required=True,
     )
     parser.add_argument("--resume_from", type=int)
     parser.add_argument("--experiment_name", type=str, default="")
-    parser.add_argument("--batch_size", type=int)
+    parser.add_argument("--batch_size", type=int, required=True)
+    parser.add_argument("--n_workers", type=int, default=0)
     return parser.parse_args()
 
 
@@ -41,6 +48,9 @@ def train(args: Namespace):
     dataset.set_mode(DataSplit.TRAIN)
     model: AbstractI2I = build_from_yaml(
         args.model_config, data_shape=dataset.data_shape()
+    )
+    data_loader = DataLoader(
+        dataset, batch_size=args.batch_size, shuffle=True, num_workers=args.n_workers
     )
     train_conf = TrainingConfig.from_yaml(args.train_config)
     discriminator_opt = Adam(model.discriminator_params())
@@ -67,16 +77,21 @@ def train(args: Namespace):
         else len(dataset)
     )
 
+    device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+    model.to(device)
     g_scaler = GradScaler()
     d_scaler = GradScaler()
-    data_iter = iter(dataset)
+    data_iter = iter(data_loader)
     step = 0
     for epoch in range(args.epochs):
         for samples, labels in data_iter:
+            samples = samples.to(device)
+            labels = labels.to(device)
             discriminator_opt.zero_grad()
             generator_opt.zero_grad()
 
-            target_labels = dataset.random_targets()
+            target_labels = dataset.random_targets(labels.shape)
+            target_labels = target_labels.to(device)
 
             with autocast():
                 discriminator_loss = model.discriminator_loss(

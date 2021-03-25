@@ -1,12 +1,14 @@
 """
 Fixed-Point GAN adapted from Siddiquee et al. (2019)
 """
-from typing import Tuple
-from models.abstract_model import AbstractI2I, AbstractGenerator
-import torch
-from torch import nn, Tensor
 from dataclasses import dataclass
-from util.dataclasses import DataShape, DataclassExtensions
+from typing import Tuple
+
+import torch
+from torch import Tensor, nn
+from util.dataclasses import DataclassExtensions, DataShape
+
+from models.abstract_model import AbstractGenerator, AbstractI2I
 
 
 @dataclass
@@ -267,10 +269,8 @@ class Discriminator(nn.Module):
         self.discriminator = nn.Conv2d(
             current_dim, 1, kernel_size=3, stride=1, padding=1, bias=False
         )
-        print(current_dim)
-        print(data_shape.y_dim)
         self.regressor = nn.Conv2d(
-            current_dim, data_shape.y_dim, kernel_size=regressor_kernel_size, bias=False
+            current_dim, data_shape.y_dim, kernel_size=3, stride=1, padding=1, bias=False
         )
 
     def forward(self, x: Tensor) -> Tuple[Tensor, Tensor]:
