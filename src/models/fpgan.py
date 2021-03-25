@@ -76,6 +76,10 @@ class FPGAN(nn.Module, AbstractI2I):
         self.generator.train()
         self.discriminator.train()
 
+    def set_eval(self):
+        self.generator.eval()
+        self.discriminator.eval()
+
     def discriminator_params(self) -> nn.parameter.Parameter:
         return self.discriminator.parameters()
 

@@ -1,7 +1,8 @@
 from abc import ABC, abstractmethod
+
 from torch import Tensor
-from util.dataclasses import DataShape, DataclassType
 from torch.nn.parameter import Parameter
+from util.dataclasses import DataclassType, DataShape
 
 
 class AbstractI2I(ABC):
@@ -69,6 +70,10 @@ class AbstractI2I(ABC):
 
     @abstractmethod
     def set_train(self) -> None:
+        ...
+
+    @abstractmethod
+    def set_eval(self) -> None:
         ...
 
 
