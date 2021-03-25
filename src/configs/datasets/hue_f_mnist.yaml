@@ -1,0 +1,5 @@
+class: data.fashion_mnist.HSVFashionMNIST
+kwargs:
+  root: FashionMNIST
+  train: true
+  download: true
