@@ -5,6 +5,7 @@ from dataclasses import dataclass
 from typing import Tuple
 
 import torch
+import torch.autograd
 from torch import Tensor, nn
 from util.dataclasses import DataclassExtensions, DataShape
 
@@ -29,6 +30,7 @@ class DiscriminatorLoss(DataclassExtensions):
     classification_real: Tensor
     classification_fake: Tensor
     label_error: Tensor
+    gradient_penalty: Tensor
 
 
 @dataclass
@@ -47,6 +49,7 @@ class FPGAN(nn.Module, AbstractI2I):
     def __init__(
         self,
         data_shape: DataShape,
+        device,
         g_conv_dim: int,
         g_num_bottleneck: int,
         d_conv_dim: int,
@@ -58,6 +61,7 @@ class FPGAN(nn.Module, AbstractI2I):
     ):
         super().__init__()
         self.data_shape = data_shape
+        self.device = device
         self.hyperparams = Hyperparams(
             g_conv_dim=g_conv_dim,
             g_num_bottleneck=g_num_bottleneck,
@@ -98,15 +102,41 @@ class FPGAN(nn.Module, AbstractI2I):
         fake_image = self.generator.transform(input_image, target_label)
         sources, _ = self.discriminator(fake_image)
         classification_fake = torch.mean(sources)  # Should be 1 (fake) for all
-        total = classification_real + classification_fake + label_real
+        # Gradient penalty loss
+        alpha = torch.rand(input_image.size(0), 1, 1, 1).to(self.device)
+        # Blend real and fake image randomly
+        x_hat = (
+            alpha * input_image.data + (1 - alpha) * fake_image.data
+        ).requires_grad_(True)
+        grad_sources, _ = self.discriminator(x_hat)
+        weight = torch.ones(grad_sources.size(), device=self.device)
+        gradient = torch.autograd.grad(
+            outputs=grad_sources,
+            inputs=x_hat,
+            grad_outputs=weight,
+            retain_graph=True,
+            create_graph=True,
+            only_inputs=True,
+        )[0]
+        gradient = gradient.view(gradient.size(0), -1)
+        gradient_norm = torch.sqrt(torch.sum(gradient ** 2, dim=1))
+        gradient_penalty = torch.mean((gradient_norm - 1) ** 2)
+        gradient_penalty *= self.hyperparams.l_grad_penalty
+
+        total = (
+            classification_real + classification_fake + label_real + gradient_penalty
+        )
         return DiscriminatorLoss(
-            total, classification_real, classification_fake, label_real
+            total,
+            classification_real,
+            classification_fake,
+            label_real,
+            gradient_penalty,
         )
 
     def generator_loss(
         self, input_image: Tensor, input_label: Tensor, target_label: Tensor
     ) -> GeneratorLoss:
-        #   TODO: add gradient penalty
         # Input to target
         fake_image = self.generator.transform(input_image, target_label)
         sources, labels = self.discriminator(fake_image)
@@ -274,7 +304,12 @@ class Discriminator(nn.Module):
             current_dim, 1, kernel_size=3, stride=1, padding=1, bias=False
         )
         self.regressor = nn.Conv2d(
-            current_dim, data_shape.y_dim, kernel_size=3, stride=1, padding=1, bias=False
+            current_dim,
+            data_shape.y_dim,
+            kernel_size=3,
+            stride=1,
+            padding=1,
+            bias=False,
         )
 
     def forward(self, x: Tensor) -> Tuple[Tensor, Tensor]:
