@@ -124,6 +124,10 @@ def train(args: Namespace):
                 model.save_checkpoint(args.checkpoint_dir, step)
 
 
-if __name__ == "__main__":
+def main():
     args = parse_args()
     train(args)
+
+
+if __name__ == "__main__":
+    main()
