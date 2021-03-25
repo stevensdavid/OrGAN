@@ -5,6 +5,7 @@ import skimage.color
 import torch
 from torchvision.datasets import FashionMNIST
 from util.dataclasses import DataShape
+from util.enums import DataSplit
 
 from data.abstract_classes import AbstractDataset
 
@@ -25,8 +26,17 @@ class HSVFashionMNIST(FashionMNIST, AbstractDataset):
             target_transform=target_transform,
             download=download,
         )
+        # FashionMNIST is split into train and test.
+        # Create validation split if we are training
+        if train:
+            total_samples = super().__len__()
+            self.len_train = int(total_samples * 0.8)
+            self.len_val = total_samples - self.len_train
 
-    def __getitem__(self, index: int) -> Tuple[Any, Any]:
+    def _getitem(self, index: int) -> Tuple[torch.tensor, torch.tensor]:
+        if self.mode is DataSplit.VAL:
+            # We use first `self.len_train` samples for training set, so offset index
+            index += self.len_train
         x, _ = super().__getitem__(index)
         x = np.array(x, dtype=float)
         y = np.random.rand()
@@ -36,11 +46,13 @@ class HSVFashionMNIST(FashionMNIST, AbstractDataset):
             torch.tensor([y], dtype=torch.float32),
         )
 
-    def _getitem(self, _):
-        raise NotImplementedError("Call __getitem__ directly")
-
     def _len(self):
-        raise NotImplementedError("Call __len__ directly")
+        if self.mode is DataSplit.TRAIN:
+            return self.len_train
+        elif self.mode is DataSplit.VAL:
+            return self.len_val
+        elif self.mode is DataSplit.TEST:
+            return len(self)
 
     def random_targets(self, shape: torch.Size) -> torch.tensor:
         return torch.rand(shape)
