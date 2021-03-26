@@ -1,9 +1,11 @@
-from typing import Any, Callable, Optional, Tuple
+from typing import Any, Callable, List, Optional, Tuple
 
 import numpy as np
 import skimage.color
 import torch
+from torch import nn
 from torchvision.datasets import FashionMNIST
+from torchvision.transforms import CenterCrop
 from util.dataclasses import DataShape
 from util.enums import DataSplit
 
@@ -26,27 +28,45 @@ class HSVFashionMNIST(FashionMNIST, AbstractDataset):
             target_transform=target_transform,
             download=download,
         )
+        self.mode = DataSplit.TRAIN if train else DataSplit.TEST
         # FashionMNIST is split into train and test.
         # Create validation split if we are training
+        total_samples = super().__len__()
         if train:
-            total_samples = super().__len__()
             self.len_train = int(total_samples * 0.8)
             self.len_val = total_samples - self.len_train
+            # self.len_train = 15
+            # self.len_val = 15
+        # Generate random labels *once*
+        np.random.seed(0)
+        self.hues = np.linspace(0, 1, num=10, endpoint=False)
+        ys = np.repeat(self.hues, total_samples // len(self.hues))
+        np.random.shuffle(ys)
+        ys += np.random.normal(size=ys.shape, scale=1 / 100)
+        self.ys = ys % 1
+        # self.ys = np.random.rand(total_samples)  # TODO: limit number of hues to say 10
+        self.pad = nn.ZeroPad2d(2)
 
-    def _getitem(self, index: int) -> Tuple[torch.tensor, torch.tensor]:
+    def _getitem(self, index):
+        return self[index]
+
+    def __getitem__(self, index: int) -> Tuple[torch.tensor, torch.tensor]:
         if self.mode is DataSplit.VAL:
             # We use first `self.len_train` samples for training set, so offset index
             index += self.len_train
         x, _ = super().__getitem__(index)
         x = np.array(x, dtype=float)
-        y = np.random.rand()
+        y = self.ys[index]
         x = self.shift_hue(x, y)
-        return (
-            torch.tensor(x, dtype=torch.float32),
-            torch.tensor([y], dtype=torch.float32),
-        )
+        x = torch.tensor(x, dtype=torch.float32)
+        y = torch.tensor([y], dtype=torch.float32)
+        x = self.pad(x)  # Zero-pads 28x28 to 32x32
+        return x, y
 
-    def _len(self):
+    def _len(self) -> int:
+        return len(self)
+
+    def __len__(self):
         if self.mode is DataSplit.TRAIN:
             return self.len_train
         elif self.mode is DataSplit.VAL:
@@ -75,30 +95,43 @@ class HSVFashionMNIST(FashionMNIST, AbstractDataset):
         x = skimage.color.gray2rgb(image)
         x = skimage.color.rgb2hsv(x)
         # Shift hue in HSV
-        x[:, :, 0] += factor
+        x[:, :, 0] += factor.item() if isinstance(factor, torch.Tensor) else factor
         x[:, :, 0] %= 1
         # Saturate grayscale
         x[:, :, 1] = 1
         x = skimage.color.hsv2rgb(x)
         x = np.moveaxis(x, -1, 0)  # Move channels to front
+        x /= 255
         return x
 
     @staticmethod
     def ground_truth(x: np.ndarray, y: float) -> np.ndarray:
+        if isinstance(x, torch.Tensor):
+            x = x.numpy()
+        x = np.moveaxis(x, 0, -1)
         x_prime = skimage.color.rgb2gray(x)
         x_prime = HSVFashionMNIST.shift_hue(x, y)
         return x_prime
+
+    @staticmethod
+    def ground_truths(xs: List[np.ndarray], ys: List[float]) -> List[np.ndarray]:
+        return [HSVFashionMNIST.ground_truth(x, y) for x, y in zip(xs, ys)]
 
 
 if __name__ == "__main__":
     dataset = HSVFashionMNIST("FashionMNIST/", download=True)
     import matplotlib.pyplot as plt
 
-    for i in range(9):
-        ax = plt.subplot(3, 3, i + 1)
-        x, y = dataset[0]
+    plt.figure(1)
+    for i in range(25):
+        ax = plt.subplot(5, 5, i + 1)
+        x, y = dataset[i]
+        x, y = x.numpy(), y.numpy()
         x = np.moveaxis(x, 0, -1)
         ax.imshow(x)
         ax.axis("off")
-        ax.title.set_text(f"H={y:.3f}")
+        ax.title.set_text(f"H={y.item():.3f}")
+    plt.tight_layout()
+    plt.figure(2)
+    plt.hist(dataset.ys, bins=100)
     plt.show()

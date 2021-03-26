@@ -58,6 +58,7 @@ class FPGAN(nn.Module, AbstractI2I):
         l_rec: float,
         l_id: float,
         l_grad_penalty: float,
+        **kwargs,
     ):
         super().__init__()
         self.data_shape = data_shape
@@ -289,7 +290,7 @@ class Discriminator(nn.Module):
             nn.LeakyReLU(0.01),
         ]
         current_dim = hyperparams.d_conv_dim
-        for _ in range(hyperparams.d_num_scales):
+        for _ in range(1, hyperparams.d_num_scales):
             layers += [
                 nn.Conv2d(
                     current_dim, 2 * current_dim, kernel_size=4, stride=2, padding=1
@@ -306,16 +307,17 @@ class Discriminator(nn.Module):
         self.regressor = nn.Conv2d(
             current_dim,
             data_shape.y_dim,
-            kernel_size=3,
-            stride=1,
-            padding=1,
+            kernel_size=regressor_kernel_size,
             bias=False,
         )
+        self.sigmoid = nn.Sigmoid()
 
     def forward(self, x: Tensor) -> Tuple[Tensor, Tensor]:
         h = self.hidden_layers(x)
         image_source = self.discriminator(h)
         image_label = self.regressor(h)
+        image_label = self.sigmoid(image_label)
+
         return (
             image_source,
             image_label.view(image_label.size(0), image_label.size(1)),

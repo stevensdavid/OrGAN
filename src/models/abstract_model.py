@@ -8,6 +8,7 @@ from util.dataclasses import DataclassType, DataShape
 class AbstractI2I(ABC):
     @abstractmethod
     def __init__(self, data_shape: DataShape, **kwargs) -> None:
+        self.generator: AbstractI2I
         ...
 
     @abstractmethod

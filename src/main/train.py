@@ -1,17 +1,22 @@
 from argparse import ArgumentParser, Namespace
 from os import path
+from pydoc import locate
+from typing import Type
 
+import numpy as np
 import torch
+import torch.linalg
 import wandb
 from data.abstract_classes import AbstractDataset
-from models.abstract_model import AbstractI2I
+from data.fashion_mnist import HSVFashionMNIST
+from models.abstract_model import AbstractGenerator, AbstractI2I
 from torch.cuda.amp import GradScaler, autocast
 from torch.optim import Adam
 from torch.utils.data import DataLoader
-from torch.utils.tensorboard import SummaryWriter
+from tqdm import tqdm, trange
 from util.dataclasses import TrainingConfig
 from util.enums import DataSplit, FrequencyMetric
-from util.logging import LossLogger
+from util.logging import Logger
 from util.object_loader import build_from_yaml
 
 
@@ -19,13 +24,7 @@ def parse_args() -> Namespace:
     parser = ArgumentParser()
     parser.add_argument("--epochs", type=int, help="Training duration", required=True)
     parser.add_argument(
-        "--log_dir", type=str, help="TensorBoard log directory", required=True
-    )
-    parser.add_argument(
         "--data_config", type=str, help="Path to dataset YAML config", required=True
-    )
-    parser.add_argument(
-        "--model_config", type=str, help="Path to model YAML config", required=True
     )
     parser.add_argument(
         "--train_config", type=str, help="Path to training YAML config", required=True
@@ -36,33 +35,51 @@ def parse_args() -> Namespace:
         help="Directory to save and load checkpoints from",
         required=True,
     )
+    parser.add_argument("--model", type=str, required=True)
     parser.add_argument("--resume_from", type=int)
-    parser.add_argument("--experiment_name", type=str, default="")
+    parser.add_argument("--experiment_name", type=str, default="", required=True)
     parser.add_argument("--batch_size", type=int, required=True)
     parser.add_argument("--n_workers", type=int, default=0)
-    return parser.parse_args()
+    # parser.add_argument("--learning_rate", type=float, required=True)
+    # args, unknown = parser.parse_known_args()
+    # map hyperparams like  ['--learning_rate', 0.5, ...] to paired dict items
+    # hyperparams = {k[2:]: v for k, v in zip(unknown[::2], unknown[1::2])}
+    return parser.parse_args()  # args, hyperparams
 
 
 def train(args: Namespace):
+    wandb.init(project=args.experiment_name)
+    hyperparams = wandb.config
+    device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+
     dataset: AbstractDataset = build_from_yaml(args.data_config)
     dataset.set_mode(DataSplit.TRAIN)
-    model: AbstractI2I = build_from_yaml(
-        args.model_config, data_shape=dataset.data_shape()
+    # val_dataset: AbstractDataset = build_from_yaml(args.data_config)
+    # val_dataset.set_mode(DataSplit.VAL)
+
+    class_object: Type = locate(args.model)
+    model: AbstractI2I = class_object(
+        data_shape=dataset.data_shape(), device=device, **hyperparams
     )
     data_loader = DataLoader(
         dataset, batch_size=args.batch_size, shuffle=True, num_workers=args.n_workers
     )
+    # train_loader = DataLoader(
+    #     dataset, batch_size=args.batch_size, shuffle=True, num_workers=args.n_workers
+    # )
+    # val_loader = DataLoader(
+    #     val_dataset, batch_size=args.batch_size, shuffle=True, num_workers=args.n_workers
+    # )
     train_conf = TrainingConfig.from_yaml(args.train_config)
-    discriminator_opt = Adam(model.discriminator_params())
-    generator_opt = Adam(model.generator_params())
-    tb = SummaryWriter(path.join(args.log_dir, args.experiment_name))
+    discriminator_opt = Adam(model.discriminator_params(), lr=hyperparams.learning_rate)
+    generator_opt = Adam(model.generator_params(), lr=hyperparams.learning_rate)
 
     log_frequency = train_conf.log_frequency * (
         1
         if train_conf.log_frequency_metric is FrequencyMetric.ITERATIONS
         else len(dataset)
     )
-    loss_logger = LossLogger(tb, log_frequency)
+    loss_logger = Logger(log_frequency)
     if args.resume_from is not None:
         loss_logger.restore(args.checkpoint_dir)
         with open(path.join(args.checkpoint_dir, "optimizers.json"), "r") as f:
@@ -77,14 +94,19 @@ def train(args: Namespace):
         else len(dataset)
     )
 
-    device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     model.to(device)
     g_scaler = GradScaler()
     d_scaler = GradScaler()
-    data_iter = iter(data_loader)
     step = 0
-    for epoch in range(args.epochs):
-        for samples, labels in data_iter:
+    d_updates_per_g_update = 5
+    wandb.init(project=args.experiment_name)
+    wandb.watch(model)
+
+    for epoch in trange(args.epochs, desc="Epoch"):
+        model.set_train()
+        dataset.set_mode(DataSplit.TRAIN)
+        tqdm.write("Training")
+        for samples, labels in iter(data_loader):
             samples = samples.to(device)
             labels = labels.to(device)
             discriminator_opt.zero_grad()
@@ -98,30 +120,70 @@ def train(args: Namespace):
                     samples, labels, target_labels
                 )
             d_scaler.scale(discriminator_loss.total).backward()
-
-            with autocast():
-                generator_loss = model.generator_loss(samples, labels, target_labels)
-            g_scaler.scale(generator_loss.total).backward()
-
             d_scaler.step(discriminator_opt)
-            g_scaler.step(generator_opt)
-
             d_scaler.update()
-            g_scaler.update()
 
-            loss_logger.track(generator_loss, discriminator_loss)
+            if step % d_updates_per_g_update == 0:
+                # Update generator less often
+                with autocast():
+                    generator_loss = model.generator_loss(
+                        samples, labels, target_labels
+                    )
+                g_scaler.scale(generator_loss.total).backward()
+                g_scaler.step(generator_opt)
+                g_scaler.update()
+
+            loss_logger.track_loss(
+                generator_loss.to_plain_datatypes(),
+                discriminator_loss.to_plain_datatypes(),
+            )
             step += 1
             if step % checkpoint_frequency == 0:
                 with open(path.join(args.checkpoint_dir, "optimizers.json"), "w") as f:
                     torch.save(
                         {
                             "g_opt": generator_opt.state_dict(),
-                            "d_opt": discriminator_opt.state_dict,
+                            "d_opt": discriminator_opt.state_dict(),
                         },
                         f,
                     )
                 loss_logger.save(args.checkpoint_dir)
                 model.save_checkpoint(args.checkpoint_dir, step)
+        # Validate
+        model.set_eval()
+        # TODO: generalize this to other data sets
+        total_norm = 0
+        n_attempts = 5
+        dataset.set_mode(DataSplit.VAL)
+        tqdm.write("Evaluating")
+        with torch.no_grad():
+            for samples, _ in iter(data_loader):
+                cuda_samples = samples.to(device)
+                for attempt in range(n_attempts):
+                    target_labels = dataset.random_targets(len(samples))
+                    cuda_labels = target_labels.to(device)
+                    dataset: HSVFashionMNIST  # TODO: break assumption
+                    ground_truth = dataset.ground_truths(samples, target_labels)
+                    generated = model.generator.transform(
+                        cuda_samples, torch.unsqueeze(cuda_labels, 1)
+                    )
+                    total_norm += torch.sum(
+                        torch.linalg.norm(
+                            torch.tensor(ground_truth, device=device) - generated, dim=0
+                        )
+                    )
+        # Log the last batch of images
+        generated_examples = generated[:10].cpu()
+        loss_logger.track_images(
+            generated_examples, ground_truth[:10], target_labels[:10]
+        )
+
+        val_norm = total_norm / (len(dataset) * n_attempts)
+        loss_logger.track_summary_metric("val_norm", val_norm)
+
+    # Training finished
+    model.save_checkpoint(args.checkpoint_dir, step)
+    loss_logger.finish()
 
 
 def main():
