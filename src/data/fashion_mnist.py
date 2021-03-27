@@ -38,7 +38,7 @@ class HSVFashionMNIST(FashionMNIST, AbstractDataset):
         # Generate random labels *once*
         np.random.seed(0)
         ys = np.linspace(0, 1, num=10, endpoint=False)
-        ys = np.repeat(self.ys, total_samples // len(self.hues))
+        ys = np.repeat(ys, total_samples // len(ys))
         np.random.shuffle(ys)
         self.ys = ys
         self.hues = (ys + np.random.normal(size=ys.shape, scale=1 / 100)) % 1

@@ -5,6 +5,8 @@ from typing import Type
 
 import numpy as np
 import torch
+import torch.cuda
+import torch.distributed
 import torch.linalg
 import wandb
 from data.abstract_classes import AbstractDataset
@@ -94,7 +96,9 @@ def train(args: Namespace):
         if train_conf.checkpoint_frequency_metric is FrequencyMetric.ITERATIONS
         else len(dataset)
     )
-
+    torch.distributed.init_process_group(
+        backend="nccl", world_size=torch.cuda.device_count()
+    )
     model = nn.parallel.DistributedDataParallel(model)
     model.to(device)
     g_scaler = GradScaler()
