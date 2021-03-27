@@ -23,6 +23,18 @@ from util.logging import Logger
 from util.object_loader import build_from_yaml
 
 
+class DataParallelExtension(torch.nn.DataParallel):
+    """
+    Allow nn.DataParallel to call model's attributes.
+    """
+
+    def __getattr__(self, name):
+        try:
+            return super().__getattr__(name)
+        except AttributeError:
+            return getattr(self.module, name)
+
+
 def parse_args() -> Namespace:
     parser = ArgumentParser()
     parser.add_argument("--epochs", type=int, help="Training duration", required=True)
@@ -96,10 +108,7 @@ def train(args: Namespace):
         if train_conf.checkpoint_frequency_metric is FrequencyMetric.ITERATIONS
         else len(dataset)
     )
-    torch.distributed.init_process_group(
-        backend="nccl", world_size=torch.cuda.device_count()
-    )
-    model = nn.parallel.DistributedDataParallel(model)
+    model = DataParallelExtension(model)
     model.to(device)
     g_scaler = GradScaler()
     d_scaler = GradScaler()
@@ -109,6 +118,7 @@ def train(args: Namespace):
     wandb.watch(model)
 
     for epoch in trange(args.epochs, desc="Epoch"):
+        # model.set_train()
         model.set_train()
         dataset.set_mode(DataSplit.TRAIN)
         tqdm.write("Training")
