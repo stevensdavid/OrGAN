@@ -35,16 +35,13 @@ class HSVFashionMNIST(FashionMNIST, AbstractDataset):
         if train:
             self.len_train = int(total_samples * 0.8)
             self.len_val = total_samples - self.len_train
-            # self.len_train = 15
-            # self.len_val = 15
         # Generate random labels *once*
         np.random.seed(0)
-        self.hues = np.linspace(0, 1, num=10, endpoint=False)
-        ys = np.repeat(self.hues, total_samples // len(self.hues))
+        ys = np.linspace(0, 1, num=10, endpoint=False)
+        ys = np.repeat(self.ys, total_samples // len(self.hues))
         np.random.shuffle(ys)
-        ys += np.random.normal(size=ys.shape, scale=1 / 100)
-        self.ys = ys % 1
-        # self.ys = np.random.rand(total_samples)  # TODO: limit number of hues to say 10
+        self.ys = ys
+        self.hues = (ys + np.random.normal(size=ys.shape, scale=1 / 100)) % 1
         self.pad = nn.ZeroPad2d(2)
 
     def _getitem(self, index):
@@ -57,7 +54,8 @@ class HSVFashionMNIST(FashionMNIST, AbstractDataset):
         x, _ = super().__getitem__(index)
         x = np.array(x, dtype=float)
         y = self.ys[index]
-        x = self.shift_hue(x, y)
+        hue = self.hues[index]
+        x = self.shift_hue(x, hue)
         x = torch.tensor(x, dtype=torch.float32)
         y = torch.tensor([y], dtype=torch.float32)
         x = self.pad(x)  # Zero-pads 28x28 to 32x32
