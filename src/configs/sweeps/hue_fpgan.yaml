@@ -9,9 +9,9 @@ command:
   - "--data_config"
   - "configs/datasets/hue_f_mnist.yaml"
   - "--checkpoint_dir"
-  - checkpoints
+  - /checkpoints
   - "--experiment_name"
-  - HSV FPGAN
+  - HSV_FPGAN
   - --batch_size
   - 384
   - --n_workers

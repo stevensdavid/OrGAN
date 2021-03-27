@@ -1,3 +1,4 @@
+import os
 from argparse import ArgumentParser, Namespace
 from os import path
 from pydoc import locate
@@ -9,6 +10,7 @@ import torch.cuda
 import torch.distributed
 import torch.linalg
 import wandb
+from coolname import generate_slug
 from data.abstract_classes import AbstractDataset
 from data.fashion_mnist import HSVFashionMNIST
 from models.abstract_model import AbstractGenerator, AbstractI2I
@@ -55,22 +57,19 @@ def parse_args() -> Namespace:
     parser.add_argument("--experiment_name", type=str, default="", required=True)
     parser.add_argument("--batch_size", type=int, required=True)
     parser.add_argument("--n_workers", type=int, default=0)
-    # parser.add_argument("--learning_rate", type=float, required=True)
-    # args, unknown = parser.parse_known_args()
-    # map hyperparams like  ['--learning_rate', 0.5, ...] to paired dict items
-    # hyperparams = {k[2:]: v for k, v in zip(unknown[::2], unknown[1::2])}
+    parser.add_argument("--run_name", type=str)
     return parser.parse_args()  # args, hyperparams
 
 
 def train(args: Namespace):
-    wandb.init(project=args.experiment_name)
+    if args.run_name is None:
+        run_name = generate_slug(3)
+    wandb.init(project=args.experiment_name, name=run_name)
     hyperparams = wandb.config
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
     dataset: AbstractDataset = build_from_yaml(args.data_config)
     dataset.set_mode(DataSplit.TRAIN)
-    # val_dataset: AbstractDataset = build_from_yaml(args.data_config)
-    # val_dataset.set_mode(DataSplit.VAL)
 
     class_object: Type = locate(args.model)
     model: AbstractI2I = class_object(
@@ -79,12 +78,6 @@ def train(args: Namespace):
     data_loader = DataLoader(
         dataset, batch_size=args.batch_size, shuffle=True, num_workers=args.n_workers
     )
-    # train_loader = DataLoader(
-    #     dataset, batch_size=args.batch_size, shuffle=True, num_workers=args.n_workers
-    # )
-    # val_loader = DataLoader(
-    #     val_dataset, batch_size=args.batch_size, shuffle=True, num_workers=args.n_workers
-    # )
     train_conf = TrainingConfig.from_yaml(args.train_config)
     discriminator_opt = Adam(model.discriminator_params(), lr=hyperparams.learning_rate)
     generator_opt = Adam(model.generator_params(), lr=hyperparams.learning_rate)
@@ -94,14 +87,16 @@ def train(args: Namespace):
         if train_conf.log_frequency_metric is FrequencyMetric.ITERATIONS
         else len(dataset)
     )
+    checkpoint_dir = path.join(args.checkpoint_dir, run_name)
+    os.makedirs(checkpoint_dir, exist_ok=True)
     loss_logger = Logger(log_frequency)
     if args.resume_from is not None:
-        loss_logger.restore(args.checkpoint_dir)
-        with open(path.join(args.checkpoint_dir, "optimizers.json"), "r") as f:
+        loss_logger.restore(checkpoint_dir)
+        with open(path.join(checkpoint_dir, "optimizers.json"), "r") as f:
             opt_state = torch.load(f)
         generator_opt.load_state_dict(opt_state["g_opt"])
         discriminator_opt.load_state_dict(opt_state["d_opt"])
-        model.load_checkpoint(args.resume_from)
+        model.load_checkpoint(args.resume_from, checkpoint_dir)
 
     checkpoint_frequency = train_conf.checkpoint_frequency * (
         1
@@ -118,7 +113,6 @@ def train(args: Namespace):
     wandb.watch(model)
 
     for epoch in trange(args.epochs, desc="Epoch"):
-        # model.set_train()
         model.set_train()
         dataset.set_mode(DataSplit.TRAIN)
         tqdm.write("Training")
@@ -155,7 +149,7 @@ def train(args: Namespace):
             )
             step += 1
             if step % checkpoint_frequency == 0:
-                with open(path.join(args.checkpoint_dir, "optimizers.json"), "w") as f:
+                with open(path.join(checkpoint_dir, "optimizers.json"), "w") as f:
                     torch.save(
                         {
                             "g_opt": generator_opt.state_dict(),
@@ -163,8 +157,8 @@ def train(args: Namespace):
                         },
                         f,
                     )
-                loss_logger.save(args.checkpoint_dir)
-                model.save_checkpoint(args.checkpoint_dir, step)
+                loss_logger.save(checkpoint_dir)
+                model.save_checkpoint(step, checkpoint_dir)
         # Validate
         model.set_eval()
         # TODO: generalize this to other data sets
@@ -198,7 +192,7 @@ def train(args: Namespace):
         loss_logger.track_summary_metric("val_norm", val_norm)
 
     # Training finished
-    model.save_checkpoint(args.checkpoint_dir, step)
+    model.save_checkpoint(step, checkpoint_dir)
     loss_logger.finish()
 
 
