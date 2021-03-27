@@ -10,6 +10,7 @@ import wandb
 from data.abstract_classes import AbstractDataset
 from data.fashion_mnist import HSVFashionMNIST
 from models.abstract_model import AbstractGenerator, AbstractI2I
+from torch import nn
 from torch.cuda.amp import GradScaler, autocast
 from torch.optim import Adam
 from torch.utils.data import DataLoader
@@ -94,6 +95,7 @@ def train(args: Namespace):
         else len(dataset)
     )
 
+    model = nn.parallel.DistributedDataParallel(model)
     model.to(device)
     g_scaler = GradScaler()
     d_scaler = GradScaler()
