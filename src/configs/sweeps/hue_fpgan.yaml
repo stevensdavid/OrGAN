@@ -5,7 +5,7 @@ command:
   - "-m"
   - ${program}
   - "--epochs"
-  - 100
+  - 300
   - "--data_config"
   - "configs/datasets/hue_f_mnist.yaml"
   - "--checkpoint_dir"
