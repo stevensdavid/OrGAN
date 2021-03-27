@@ -81,4 +81,4 @@ RUN conda update --name base --channel defaults conda && \
    conda clean --all --yes
 
 # Add code
-COPY . ${PROJECT_DIR}
+COPY --chown=${USER}:${GID} . ${PROJECT_DIR}
