@@ -53,6 +53,7 @@ class HSVFashionMNIST(FashionMNIST, AbstractDataset):
             index += self.len_train
         x, _ = super().__getitem__(index)
         x = np.array(x, dtype=float)
+        x /= 255  # Normalize for hue shift
         y = self.ys[index]
         hue = self.hues[index]
         x = self.shift_hue(x, hue)
@@ -84,7 +85,7 @@ class HSVFashionMNIST(FashionMNIST, AbstractDataset):
         """Shift the hue of an image
 
         Args:
-            pil_image (Image): Grayscale image
+            image (np.ndarray): Grayscale image, between 0 and 1
             factor (float): Between 0 and 1, the HSV hue value to shift by
 
         Returns:
@@ -95,13 +96,12 @@ class HSVFashionMNIST(FashionMNIST, AbstractDataset):
         x = skimage.color.gray2rgb(image)
         x = skimage.color.rgb2hsv(x)
         # Shift hue in HSV
-        x[:, :, 0] += factor.item() if isinstance(factor, torch.Tensor) else factor
-        x[:, :, 0] %= 1
+        x[:, :, 0] = factor.item() if isinstance(factor, torch.Tensor) else factor
+        # x[:, :, 0] %= 1 # Should be redundant as hues are [0,1)
         # Saturate grayscale
         x[:, :, 1] = 1
         x = skimage.color.hsv2rgb(x)
         x = np.moveaxis(x, -1, 0)  # Move channels to front
-        x /= 255
         return x
 
     @staticmethod
@@ -111,18 +111,28 @@ class HSVFashionMNIST(FashionMNIST, AbstractDataset):
         if isinstance(x, torch.Tensor):
             x = x.numpy()
         x = np.moveaxis(x, 0, -1)
-        x_prime = skimage.color.rgb2gray(x)
-        x_prime = HSVFashionMNIST.shift_hue(x_prime, y)
-        return x_prime
+        x = skimage.color.rgb2hsv(x)
+        x[:, :, 0] = y
+        x = skimage.color.hsv2rgb(x)
+        x = np.moveaxis(x, -1, 0)
+        return x
 
     @staticmethod
     def ground_truths(xs: List[np.ndarray], ys: List[float]) -> List[np.ndarray]:
-        return [HSVFashionMNIST.ground_truth(x, y) for x, y in zip(xs, ys)]
+        return [HSVFashionMNIST.ground_truth(x, y) for x, y, target in zip(xs, ys)]
 
 
 if __name__ == "__main__":
     dataset = HSVFashionMNIST("FashionMNIST/", download=True)
     import matplotlib.pyplot as plt
+
+    x, y = dataset[0]
+    z = dataset.ground_truth(x, y, y)
+    z2 = dataset.ground_truth(x, y, 0.5)
+    plt.figure(0)
+    combined = np.concatenate((x, z, z2), axis=1)
+    combined = np.moveaxis(combined, 0, -1)
+    plt.imshow(combined)
 
     plt.figure(1)
     for i in range(25):
