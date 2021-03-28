@@ -115,7 +115,6 @@ def train(args: Namespace):
     for epoch in trange(args.epochs, desc="Epoch"):
         model.set_train()
         dataset.set_mode(DataSplit.TRAIN)
-        tqdm.write("Training")
         for samples, labels in iter(data_loader):
             samples = samples.to(device)
             labels = labels.to(device)
@@ -165,7 +164,6 @@ def train(args: Namespace):
         total_norm = 0
         n_attempts = 5
         dataset.set_mode(DataSplit.VAL)
-        tqdm.write("Evaluating")
         with torch.no_grad():
             for samples, _ in iter(data_loader):
                 cuda_samples = samples.to(device)
