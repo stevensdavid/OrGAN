@@ -183,7 +183,7 @@ def train(args: Namespace):
         # Log the last batch of images
         generated_examples = generated[:10].cpu()
         loss_logger.track_images(
-            generated_examples, ground_truth[:10], target_labels[:10]
+            samples[:10], generated_examples, ground_truth[:10], target_labels[:10]
         )
 
         val_norm = total_norm / (len(dataset) * n_attempts)
