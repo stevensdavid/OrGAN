@@ -50,8 +50,8 @@ class Logger:
         if outputs[0].shape[0] != 3 or ground_truths[0].shape[0] != 3:
             raise AssertionError("Incorrect shape in track_images")
         log_images = [
-            np.concatenate((inputs, fake, real), axis=0)
-            for fake, real in zip(outputs, ground_truths)
+            np.concatenate((inputs, fake, real), axis=2)
+            for inputs, fake, real in zip(inputs, outputs, ground_truths)
         ]
         log_images = [np.moveaxis(x, 0, -1) for x in log_images]
         wandb.log(
