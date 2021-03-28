@@ -108,7 +108,7 @@ class HSVFashionMNIST(FashionMNIST, AbstractDataset):
             x = x.numpy()
         x = np.moveaxis(x, 0, -1)
         x_prime = skimage.color.rgb2gray(x)
-        x_prime = HSVFashionMNIST.shift_hue(x, y)
+        x_prime = HSVFashionMNIST.shift_hue(x_prime, y)
         return x_prime
 
     @staticmethod
