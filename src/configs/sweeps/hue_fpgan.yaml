@@ -13,7 +13,7 @@ command:
   - "--experiment_name"
   - HSV_FPGAN
   - --batch_size
-  - 384
+  - 512
   - --n_workers
   - 8
   - --train_config
