@@ -90,6 +90,8 @@ class HSVFashionMNIST(FashionMNIST, AbstractDataset):
         Returns:
             np.ndarray: Hue-shifted image
         """
+        if len(image.shape) != 2:
+            raise AssertionError(f"Incorrect shape in shift_hue: {image.shape}")
         x = skimage.color.gray2rgb(image)
         x = skimage.color.rgb2hsv(x)
         # Shift hue in HSV
@@ -104,6 +106,8 @@ class HSVFashionMNIST(FashionMNIST, AbstractDataset):
 
     @staticmethod
     def ground_truth(x: np.ndarray, y: float) -> np.ndarray:
+        if x.shape[0] != 3:
+            raise AssertionError(f"Incorrect shape in ground_truth: {x.shape}")
         if isinstance(x, torch.Tensor):
             x = x.numpy()
         x = np.moveaxis(x, 0, -1)
