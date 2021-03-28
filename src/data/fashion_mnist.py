@@ -119,7 +119,7 @@ class HSVFashionMNIST(FashionMNIST, AbstractDataset):
 
     @staticmethod
     def ground_truths(xs: List[np.ndarray], ys: List[float]) -> List[np.ndarray]:
-        return [HSVFashionMNIST.ground_truth(x, y) for x, y, target in zip(xs, ys)]
+        return [HSVFashionMNIST.ground_truth(x, y) for x, y in zip(xs, ys)]
 
 
 if __name__ == "__main__":
