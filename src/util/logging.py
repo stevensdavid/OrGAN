@@ -35,6 +35,7 @@ class Logger:
                     ),
                 },
                 step=self.steps,
+                commit=False,
             )
             self.discriminator_loss = 0
             self.generator_loss = 0
@@ -42,10 +43,12 @@ class Logger:
     def track_summary_metric(self, metric_name: str, value: float):
         if value > self.summary[metric_name]:
             self.summary[metric_name] = value
-        wandb.log({metric_name: value})
+        wandb.log({metric_name: value}, step=self.steps, commit=False)
 
     def track_images(self, samples, ground_truths=None, labels=None) -> None:
         # TODO: make work without ground truth/labels
+        if samples[0].shape[0] != 3 or ground_truths[0].shape[0] != 3:
+            raise AssertionError("Incorrect shape in track_images")
         log_images = [
             np.concatenate((fake, real), axis=1)
             for fake, real in zip(samples, ground_truths)
@@ -58,6 +61,7 @@ class Logger:
                     for x, y in zip(log_images, labels)
                 ]
             },
+            commit=False,
         )
 
     def finish(self):
