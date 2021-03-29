@@ -1,5 +1,6 @@
 name: msc
 channels:
+  - pytorch
   - defaults
 dependencies:
   - _libgcc_mutex=0.1=main
@@ -26,14 +27,17 @@ dependencies:
   - cloudpickle=1.6.0=py_0
   - coverage=5.5=py37h27cfd23_2
   - cryptography=3.4.7=py37hd23ed53_0
-  - cudatoolkit=10.1.243=h6bb024c_0
+  - cudatoolkit=10.2.89=hfd86e86_1
   - cycler=0.10.0=py37_0
   - cython=0.29.22=py37h2531618_0
   - cytoolz=0.11.0=py37h7b6447c_0
   - dask-core=2021.3.0=pyhd3eb1b0_0
   - decorator=4.4.2=pyhd3eb1b0_0
+  - ffmpeg=4.3=hf484d3e_0
   - freetype=2.10.4=h5ab3b9f_0
   - giflib=5.1.4=h14c3975_1
+  - gmp=6.2.1=h2531618_2
+  - gnutls=3.6.5=h71b1129_1002
   - google-auth=1.28.0=pyhd3eb1b0_0
   - google-auth-oauthlib=0.4.3=pyhd3eb1b0_0
   - grpcio=1.36.1=py37h2157cd5_1
@@ -45,6 +49,7 @@ dependencies:
   - jpeg=9b=h024ee3a_2
   - jxrlib=1.1=h7b6447c_2
   - kiwisolver=1.3.1=py37h2531618_0
+  - lame=3.100=h7b6447c_0
   - lcms2=2.11=h396b838_0
   - ld_impl_linux-64=2.33.1=h53a641e_7
   - lerc=2.2.1=h2531618_0
@@ -53,11 +58,13 @@ dependencies:
   - libffi=3.3=he6710b0_2
   - libgcc-ng=9.1.0=hdf63c60_0
   - libgfortran-ng=7.3.0=hdf63c60_0
+  - libiconv=1.15=h63c8f33_5
   - libmklml=2019.0.5=0
   - libpng=1.6.37=hbc83047_0
   - libprotobuf=3.14.0=h8c45485_0
   - libstdcxx-ng=9.1.0=hdf63c60_0
   - libtiff=4.1.0=h2733197_1
+  - libuv=1.40.0=h7b6447c_0
   - libwebp=1.0.1=h8e7db2f_0
   - libzopfli=1.0.3=he6710b0_0
   - lz4-c=1.9.3=h2531618_0
@@ -69,12 +76,14 @@ dependencies:
   - mkl_random=1.1.1=py37h0573a6f_0
   - multidict=5.1.0=py37h27cfd23_2
   - ncurses=6.2=he6710b0_1
+  - nettle=3.4.1=hbb512f6_0
   - networkx=2.5=py_0
   - ninja=1.10.2=py37hff7bd54_0
   - numpy=1.19.2=py37h54aff64_0
   - numpy-base=1.19.2=py37hfa32c7d_0
   - oauthlib=3.1.0=py_0
   - olefile=0.46=py37_0
+  - openh264=2.1.0=hd408876_0
   - openjpeg=2.3.0=h05c96fa_1
   - openssl=1.1.1k=h27cfd23_0
   - pandas=1.2.3=py37ha9443f7_0
@@ -90,7 +99,7 @@ dependencies:
   - pysocks=1.7.1=py37_1
   - python=3.7.10=hdb3f193_0
   - python-dateutil=2.8.1=pyhd3eb1b0_0
-  - pytorch=1.7.1=cpu_py37h6a09485_0
+  - pytorch=1.8.1=py3.7_cuda10.2_cudnn7.6.5_0
   - pytz=2021.1=pyhd3eb1b0_0
   - pywavelets=1.1.1=py37h7b6447c_2
   - pyyaml=5.4.1=py37h27cfd23_1
@@ -109,7 +118,7 @@ dependencies:
   - tifffile=2021.3.17=pyhd3eb1b0_1
   - tk=8.6.10=hbc83047_0
   - toolz=0.11.1=pyhd3eb1b0_0
-  - torchvision=0.2.1=py37_0
+  - torchvision=0.9.1=py37_cu102
   - tornado=6.1=py37h27cfd23_0
   - typing-extensions=3.7.4.3=hd3eb1b0_0
   - typing_extensions=3.7.4.3=pyh06a4308_0
