@@ -2,7 +2,7 @@
 # https://github.com/kaust-vislab/python-data-science-project/blob/master/docker/Dockerfile
 # https://hub.docker.com/r/anibali/pytorch/dockerfile
 # https://github.com/pytorch/pytorch/blob/master/docker/pytorch/Dockerfile
-FROM nvidia/cuda:11.0.3-devel-ubuntu20.04
+FROM nvidia/cuda:10.1-cudnn7-devel-ubuntu16.04
 
 SHELL [ "/bin/bash", "--login", "-c" ]
 
@@ -81,4 +81,5 @@ RUN conda update --name base --channel defaults conda && \
    conda clean --all --yes
 
 # Add code
-COPY --chown=${USER}:${GID} . ${PROJECT_DIR}
+# COPY --chown=${USER}:${GID} . ${PROJECT_DIR}
+RUN git clone https://github.com/stevensdavid/msc.git
