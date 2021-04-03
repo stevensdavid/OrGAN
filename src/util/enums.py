@@ -10,3 +10,8 @@ class DataSplit(Enum):
 class FrequencyMetric(Enum):
     EPOCHS = auto()
     ITERATIONS = auto()
+
+
+class VicinityType(Enum):
+    HARD = auto()
+    SOFT = auto()
