@@ -1,4 +1,5 @@
 import os
+import random
 from argparse import ArgumentParser, Namespace
 from os import path
 from pydoc import locate
@@ -195,6 +196,9 @@ def train(args: Namespace):
 
 
 def main():
+    np.random.seed(0)
+    torch.random.seed(0)
+    random.seed(0)
     args = parse_args()
     train(args)
 
