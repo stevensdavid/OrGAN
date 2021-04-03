@@ -20,6 +20,7 @@ class HSVFashionMNIST(FashionMNIST, AbstractDataset):
         transform: Optional[Callable] = None,
         target_transform: Optional[Callable] = None,
         download: bool = False,
+        simplified: bool = False,
     ) -> None:
         super().__init__(
             root,
@@ -29,6 +30,7 @@ class HSVFashionMNIST(FashionMNIST, AbstractDataset):
             download=download,
         )
         self.mode = DataSplit.TRAIN if train else DataSplit.TEST
+        self.simplified = simplified
         # FashionMNIST is split into train and test.
         # Create validation split if we are training
         total_samples = super().__len__()
@@ -74,6 +76,11 @@ class HSVFashionMNIST(FashionMNIST, AbstractDataset):
             return len(self)
 
     def random_targets(self, shape: torch.Size) -> torch.tensor:
+        if self.simplified:
+            # Only include labels that are part of the dataset
+            return torch.tensor(
+                np.random.choice(self.ys, size=shape), dtype=torch.float32
+            )
         return torch.rand(shape)
 
     def data_shape(self) -> DataShape:
@@ -124,6 +131,7 @@ class HSVFashionMNIST(FashionMNIST, AbstractDataset):
 
 if __name__ == "__main__":
     dataset = HSVFashionMNIST("FashionMNIST/", download=True)
+    x = dataset.random_targets((30, 1))
     import matplotlib.pyplot as plt
 
     x, y = dataset[0]
