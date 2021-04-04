@@ -3,6 +3,7 @@ Fixed-Point GAN adapted from Siddiquee et al. (2019) with additions from Ding et
 (2020)
 """
 from torch import Tensor, nn
+from torch.cuda.amp import autocast
 from torchvision.models import resnet18
 from util.dataclasses import DataShape
 from util.enums import CcGANInputMechanism
@@ -37,6 +38,7 @@ class LabelEmbedding(nn.Module):
             nn.ReLU(),
         )
 
+    @autocast()
     def forward(self, x: Tensor) -> Tensor:
         x = x.view(-1, self.n_labels)
         return self.layers(x)
@@ -52,11 +54,13 @@ class ConvLabelClassifier(nn.Module):
         # Final FC is separate to allow feature extraction
         self.t2 = nn.Linear(embedding_dim, n_labels)
 
+    @autocast()
     def forward(self, x: Tensor) -> Tensor:
         h = self.t1(x)
         y = self.t2(h)
         return y
 
+    @autocast()
     def extract_features(self, x: Tensor) -> Tensor:
         return self.t1(x)
 
