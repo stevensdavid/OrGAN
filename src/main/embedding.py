@@ -108,6 +108,7 @@ def train_or_load_feature_extractor(
     if os.path.exists(save_path):
         LOG.info("Returning pretrained ResNet")
         model.load_state_dict(torch.load(save_path))
+        model.to(device)
         return model.t1
     LOG.info("Training new ResNet")
     model = _train_model(
@@ -165,12 +166,13 @@ def train_or_load_embedding(
     n_labels = data_shape.y_dim
     embedding_path = os.path.join(save_dir, "embedding.json")
     os.makedirs(os.path.dirname(embedding_path), exist_ok=True)
+    device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     if os.path.exists(embedding_path):
         embedding = LabelEmbedding(embedding_dim, n_labels)
         embedding.load_state_dict(torch.load(embedding_path))
+        embedding.to(device)
         return embedding
 
-    device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     data_loader = DataLoader(
         dataset,
         batch_size=batch_size,
