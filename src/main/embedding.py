@@ -82,6 +82,8 @@ def _train_model(
         if mean_loss < best_loss:
             epochs_since_best = 0
             best_loss = mean_loss
+        else:
+            epochs_since_best += 1
 
         LOG.info(
             f"Epoch {current_epoch} Loss: {mean_loss:.3e} Patience: {epochs_since_best}/{patience}"
