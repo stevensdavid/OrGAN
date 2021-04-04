@@ -121,7 +121,7 @@ def train_or_load_feature_extractor(
         target_input_getter=lambda x, y: y,
     )
     torch.save(model.state_dict(), save_path)
-    return model
+    return model.t1
 
 
 def train_embedding(
@@ -144,7 +144,7 @@ def train_embedding(
         data_loader,
         patience,
         device,
-        target_fn=feature_extractor.extract_features,
+        target_fn=feature_extractor,
         model_input_getter=lambda _, y: y,
         target_input_getter=lambda x, _: x,
     )
