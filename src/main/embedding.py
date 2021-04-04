@@ -108,7 +108,7 @@ def train_or_load_feature_extractor(
     if os.path.exists(save_path):
         LOG.info("Returning pretrained ResNet")
         model.load_state_dict(torch.load(save_path))
-        return model
+        return model.t1
     LOG.info("Training new ResNet")
     model = _train_model(
         model,
