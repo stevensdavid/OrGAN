@@ -42,6 +42,8 @@ def _train_model(
     patience: int,
     device: torch.device,
     target_fn: Callable[[Tensor], Tensor],
+    model_input_getter: Callable[[Tensor, Tensor], Tensor],
+    target_input_getter: Callable[[Tensor, Tensor], Tensor],
 ) -> nn.Module:
     module.to(device)
     model = nn.DataParallel(module)
@@ -55,8 +57,8 @@ def _train_model(
     def sample_loss(x, y) -> Tensor:
         x, y = x.to(device), y.to(device)
         with autocast():
-            output = model(x)
-            target = target_fn(y)
+            output = model(model_input_getter(x, y))
+            target = target_fn(target_input_getter(x, y))
             return criterion(output, target)
 
     while epochs_since_best < patience:
@@ -104,7 +106,14 @@ def train_or_load_feature_extractor(
         return model
     LOG.info("Training new ResNet")
     model = _train_model(
-        model, dataset, data_loader, patience, device, target_fn=lambda y: y
+        model,
+        dataset,
+        data_loader,
+        patience,
+        device,
+        target_fn=lambda y: y,
+        model_input_getter=lambda x, y: x,
+        target_input_getter=lambda x, y: y,
     )
     torch.save(model.state_dict(), save_path)
     return model
@@ -122,6 +131,7 @@ def train_embedding(
 ) -> LabelEmbedding:
     LOG.info("Training embedding")
     model = LabelEmbedding(embedding_dim, n_labels)
+    feature_extractor.to(device)
     model = _train_model(
         model,
         dataset,
@@ -129,6 +139,8 @@ def train_embedding(
         patience,
         device,
         target_fn=feature_extractor.extract_features,
+        model_input_getter=lambda _, y: y,
+        target_input_getter=lambda x, _: x,
     )
     torch.save(model.state_dict, save_path)
     return model
@@ -164,7 +176,14 @@ def train_or_load_embedding(
         embedding_dim, dataset, data_loader, device, n_labels, patience, resnet_path
     )
     embedding = train_embedding(
-        embedding_dim, dataset, data_loader, device, n_labels, patience, resnet,
+        embedding_dim,
+        dataset,
+        data_loader,
+        device,
+        n_labels,
+        patience,
+        resnet,
+        embedding_path,
     )
     return embedding
 
