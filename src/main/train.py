@@ -39,7 +39,7 @@ class DataParallelExtension(torch.nn.DataParallel):
             return getattr(self.module, name)
 
 
-def parse_args() -> Namespace:
+def parse_args() -> Tuple[Namespace, dict]:
     parser = ArgumentParser()
     parser.add_argument("--epochs", type=int, help="Training duration", required=True)
     parser.add_argument(
@@ -60,14 +60,23 @@ def parse_args() -> Namespace:
     parser.add_argument("--batch_size", type=int, required=True)
     parser.add_argument("--n_workers", type=int, default=0)
     parser.add_argument("--run_name", type=str)
-    return parser.parse_args()
+    parser.add_argument("--ccgan_vicinity_type", type=str, choices=["hard", "soft"])
+    parser.add_argument(
+        "--ccgan_embedding_file", type=str, help="CcGAN embedding module"
+    )
+    parser.add_argument("--ccgan_embedding_dim", type=int)
+    args, unknown = parser.parse_known_args()
+    # map hyperparams like  ['--learning_rate', 0.5, ...] to paired dict items
+    hyperparams = (
+        {k[2:]: v for k, v in zip(unknown[::2], unknown[1::2])} if unknown else None
+    )
+    return args, hyperparams
 
 
-
-def train(args: Namespace):
+def train(args: Namespace, hyperparams: Optional[dict]):
     if args.run_name is None:
         run_name = generate_slug(3)
-    wandb.init(project=args.experiment_name, name=run_name)
+    wandb.init(project="msc", name=run_name, config=hyperparams, id=run_name)
     hyperparams = wandb.config
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
@@ -203,8 +212,8 @@ def train(args: Namespace):
 
 def main():
     set_seeds(seed=0)
-    args = parse_args()
-    train(args)
+    args, hyperparams = parse_args()
+    train(args, hyperparams)
 
 
 if __name__ == "__main__":
