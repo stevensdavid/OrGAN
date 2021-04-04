@@ -59,7 +59,10 @@ def parse_args() -> Namespace:
     parser.add_argument("--batch_size", type=int, required=True)
     parser.add_argument("--n_workers", type=int, default=0)
     parser.add_argument("--run_name", type=str)
-    return parser.parse_args()  # args, hyperparams
+def seed_worker(worker_id):
+    worker_seed = torch.initial_seed() % 2 ** 32
+    np.random.seed(worker_seed)
+    random.seed(worker_seed)
 
 
 def train(args: Namespace):
@@ -77,7 +80,11 @@ def train(args: Namespace):
         data_shape=dataset.data_shape(), device=device, **hyperparams
     )
     data_loader = DataLoader(
-        dataset, batch_size=args.batch_size, shuffle=True, num_workers=args.n_workers
+        dataset,
+        batch_size=args.batch_size,
+        shuffle=True,
+        num_workers=args.n_workers,
+        worker_init_fn=seed_worker,
     )
     train_conf = TrainingConfig.from_yaml(args.train_config)
     discriminator_opt = Adam(model.discriminator_params(), lr=hyperparams.learning_rate)
@@ -197,8 +204,9 @@ def train(args: Namespace):
 
 def main():
     np.random.seed(0)
-    torch.random.seed(0)
+    torch.manual_seed(0)
     random.seed(0)
+    torch.use_deterministic_algorithms(True)
     args = parse_args()
     train(args)
 
