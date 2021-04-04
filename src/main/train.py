@@ -24,6 +24,7 @@ from util.dataclasses import TrainingConfig
 from util.enums import DataSplit, FrequencyMetric
 from util.logging import Logger
 from util.object_loader import build_from_yaml
+from util.pytorch_utils import set_seeds, seed_worker
 
 
 class DataParallelExtension(torch.nn.DataParallel):
@@ -59,10 +60,8 @@ def parse_args() -> Namespace:
     parser.add_argument("--batch_size", type=int, required=True)
     parser.add_argument("--n_workers", type=int, default=0)
     parser.add_argument("--run_name", type=str)
-def seed_worker(worker_id):
-    worker_seed = torch.initial_seed() % 2 ** 32
-    np.random.seed(worker_seed)
-    random.seed(worker_seed)
+    return parser.parse_args()
+
 
 
 def train(args: Namespace):
@@ -203,10 +202,7 @@ def train(args: Namespace):
 
 
 def main():
-    np.random.seed(0)
-    torch.manual_seed(0)
-    random.seed(0)
-    torch.use_deterministic_algorithms(True)
+    set_seeds(seed=0)
     args = parse_args()
     train(args)
 
