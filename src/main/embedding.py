@@ -48,6 +48,7 @@ def _train_model(
     module.to(device)
     model = nn.DataParallel(module)
     best_loss = np.inf
+    best_weights = None
     epochs_since_best = 0
     current_epoch = 1
     optimizer = optim.Adam(model.parameters())
@@ -82,6 +83,7 @@ def _train_model(
         if mean_loss < best_loss:
             epochs_since_best = 0
             best_loss = mean_loss
+            best_weights = module.state_dict()
         else:
             epochs_since_best += 1
 
@@ -89,6 +91,7 @@ def _train_model(
             f"Epoch {current_epoch} Loss: {mean_loss:.3e} Patience: {epochs_since_best}/{patience}"
         )
         current_epoch += 1
+    module.load_state_dict(best_weights)
     return module
 
 
