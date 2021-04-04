@@ -81,6 +81,7 @@ class FPGAN(nn.Module, AbstractI2I):
         self.discriminator = Discriminator(
             self.data_shape, self.hyperparams.d_conv_dim, self.hyperparams.d_num_scales
         )
+        self.square_error = nn.MSELoss(reduction="none")
         self.mse = nn.MSELoss()
 
     def set_train(self):
@@ -98,17 +99,28 @@ class FPGAN(nn.Module, AbstractI2I):
         return self.generator.parameters()
 
     def discriminator_loss(
-        self, input_image: Tensor, input_label: Tensor, target_label: Tensor
+        self,
+        input_image: Tensor,
+        input_label: Tensor,
+        target_label: Tensor,
+        sample_weights: Tensor,
+        target_weights: Tensor,
     ) -> DiscriminatorLoss:
         # TODO: add gradient penalty
         # Discriminator losses with real images
         sources, labels = self.discriminator(input_image)
-        classification_real = -torch.mean(sources)  # Should be 0 (real) for all
-        label_real = self.hyperparams.l_mse * self.mse(labels, input_label)
+        classification_real = -torch.mean(
+            sample_weights * sources
+        )  # Should be 0 (real) for all
+        label_real = self.hyperparams.l_mse * torch.mean(
+            sample_weights * self.square_error(labels, input_label)
+        )
         # Discriminator losses with fake images
         fake_image = self.generator.transform(input_image, target_label)
         sources, _ = self.discriminator(fake_image)
-        classification_fake = torch.mean(sources)  # Should be 1 (fake) for all
+        classification_fake = torch.mean(
+            target_weights * sources
+        )  # Should be 1 (fake) for all
         # Gradient penalty loss
         alpha = torch.rand(input_image.size(0), 1, 1, 1).to(self.device)
         # Blend real and fake image randomly

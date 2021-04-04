@@ -13,7 +13,12 @@ class AbstractI2I(ABC):
 
     @abstractmethod
     def discriminator_loss(
-        self, input_image: Tensor, input_label: Tensor, target_label: Tensor
+        self,
+        input_image: Tensor,
+        input_label: Tensor,
+        target_label: Tensor,
+        sample_weights: Tensor,
+        target_weights: Tensor,
     ) -> DataclassType:
         """[summary]
 
@@ -21,6 +26,8 @@ class AbstractI2I(ABC):
             input_image (Tensor): [description]
             input_label (Tensor): [description]
             target_label (Tensor): [description]
+            sample_weights (Tensor): [description]
+            target_weights (Tensor): [description]
 
         Returns:
             DataclassType: [description]
