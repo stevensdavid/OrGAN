@@ -137,6 +137,7 @@ def train_embedding(
     LOG.info("Training embedding")
     model = LabelEmbedding(embedding_dim, n_labels)
     feature_extractor.to(device)
+    feature_extractor = nn.DataParallel(feature_extractor)
     model = _train_model(
         model,
         dataset,
