@@ -163,6 +163,7 @@ def train_or_load_embedding(
     data_shape = dataset.data_shape()
     n_labels = data_shape.y_dim
     embedding_path = os.path.join(save_dir, "embedding.json")
+    os.makedirs(os.path.dirname(embedding_path), exist_ok=True)
     if os.path.exists(embedding_path):
         embedding = LabelEmbedding(embedding_dim, n_labels)
         embedding.load_state_dict(torch.load(embedding_path))
@@ -177,6 +178,7 @@ def train_or_load_embedding(
         worker_init_fn=seed_worker,
     )
     resnet_path = os.path.join(save_dir, "feature_extractor.json")
+    os.makedirs(os.path.dirname(resnet_path), exist_ok=True)
     resnet = train_or_load_feature_extractor(
         embedding_dim, dataset, data_loader, device, n_labels, patience, resnet_path
     )
