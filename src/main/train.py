@@ -1,11 +1,9 @@
 import os
-import random
 from argparse import ArgumentParser, Namespace
 from os import path
 from pydoc import locate
-from typing import Type
+from typing import Optional, Tuple, Type
 
-import numpy as np
 import torch
 import torch.cuda
 import torch.distributed
@@ -13,18 +11,20 @@ import torch.linalg
 import wandb
 from coolname import generate_slug
 from data.abstract_classes import AbstractDataset
+from data.ccgan_wrapper import CcGANDatasetWrapper
 from data.fashion_mnist import HSVFashionMNIST
-from models.abstract_model import AbstractGenerator, AbstractI2I
+from models.abstract_model import AbstractI2I
+from models.ccgan import LabelEmbedding
 from torch import nn
 from torch.cuda.amp import GradScaler, autocast
 from torch.optim import Adam
 from torch.utils.data import DataLoader
-from tqdm import tqdm, trange
+from tqdm import trange
 from util.dataclasses import TrainingConfig
-from util.enums import DataSplit, FrequencyMetric
+from util.enums import DataSplit, FrequencyMetric, VicinityType
 from util.logging import Logger
 from util.object_loader import build_from_yaml
-from util.pytorch_utils import set_seeds, seed_worker
+from util.pytorch_utils import seed_worker, set_seeds
 
 
 class DataParallelExtension(torch.nn.DataParallel):
@@ -80,12 +80,25 @@ def train(args: Namespace, hyperparams: Optional[dict]):
     hyperparams = wandb.config
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
+    train_conf = TrainingConfig.from_yaml(args.train_config)
     dataset: AbstractDataset = build_from_yaml(args.data_config)
+    data_shape = dataset.data_shape()
+    if train_conf.ccgan:
+        vicinity_type = (
+            VicinityType.HARD
+            if args.ccgan_vicinity_type == "hard"
+            else VicinityType.SOFT
+        )
+        dataset = CcGANDatasetWrapper(
+            dataset, type=vicinity_type, sigma=hyperparams.ccgan_sigma,
+        )
+        embedding = LabelEmbedding(args.ccgan_embedding_dim, n_labels=data_shape.y_dim)
+        embedding.to(device)
     dataset.set_mode(DataSplit.TRAIN)
 
     class_object: Type = locate(args.model)
     model: AbstractI2I = class_object(
-        data_shape=dataset.data_shape(), device=device, **hyperparams
+        data_shape=data_shape, device=device, **hyperparams
     )
     data_loader = DataLoader(
         dataset,
@@ -94,7 +107,6 @@ def train(args: Namespace, hyperparams: Optional[dict]):
         num_workers=args.n_workers,
         worker_init_fn=seed_worker,
     )
-    train_conf = TrainingConfig.from_yaml(args.train_config)
     discriminator_opt = Adam(model.discriminator_params(), lr=hyperparams.learning_rate)
     generator_opt = Adam(model.generator_params(), lr=hyperparams.learning_rate)
 
@@ -132,17 +144,31 @@ def train(args: Namespace, hyperparams: Optional[dict]):
         model.set_train()
         dataset.set_mode(DataSplit.TRAIN)
         for samples, labels in iter(data_loader):
+            if train_conf.ccgan:
+                target_labels, target_weights = (
+                    labels["target_labels"],
+                    labels["target_weights"],
+                )
+                labels, sample_weights = labels["labels"], labels["loss_weights"]
+            else:
+                sample_weights = torch.ones(args.batch_size)
+                target_labels = dataset.random_targets(labels.shape)
+                target_weights = torch.ones(args.batch_size)
             samples = samples.to(device)
             labels = labels.to(device)
+            sample_weights = sample_weights.to(device)
+            target_weights = target_weights.to(device)
             discriminator_opt.zero_grad()
             generator_opt.zero_grad()
 
-            target_labels = dataset.random_targets(labels.shape)
             target_labels = target_labels.to(device)
+            if train_conf.ccgan:
+                labels = embedding(labels)
+                target_labels = embedding(target_labels)
 
             with autocast():
                 discriminator_loss = model.discriminator_loss(
-                    samples, labels, target_labels
+                    samples, labels, target_labels, sample_weights, target_weights
                 )
             d_scaler.scale(discriminator_loss.total).backward()
             d_scaler.step(discriminator_opt)
