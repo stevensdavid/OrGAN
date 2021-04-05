@@ -101,8 +101,8 @@ def train(gpu: int, args: Namespace, hyperparams: Optional[dict]):
         dataset = CcGANDatasetWrapper(
             dataset,
             type=vicinity_type,
-            sigma=hyperparams.ccgan_sigma,
-            n_neighbours=hyperparams.ccgan_n_neighbours,
+            sigma=hyperparams["ccgan_sigma"],
+            n_neighbours=hyperparams["ccgan_n_neighbours"],
         )
         embedding = LabelEmbedding(args.ccgan_embedding_dim, n_labels=data_shape.y_dim)
         embedding.load_state_dict(torch.load(args.ccgan_embedding_file)())
@@ -275,7 +275,8 @@ def main():
         args.run_name = generate_slug(3)
     wandb.init(project="msc", name=args.run_name, config=hyperparams, id=args.run_name)
     set_seeds(seed=0)
-    mp.spawn(train, nprocs=args.n_gpus, args=(args, wandb.config))
+    hyperparams = wandb.config.as_dict()
+    mp.spawn(train, nprocs=args.n_gpus, args=(args, hyperparams))
 
 
 if __name__ == "__main__":
