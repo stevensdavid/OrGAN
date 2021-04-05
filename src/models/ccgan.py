@@ -71,11 +71,7 @@ class CCGenerator(patchgan.Generator):
         self, data_shape: DataShape, conv_dim: int, num_bottleneck_layers: int
     ):
         super().__init__(
-            data_shape,
-            conv_dim,
-            num_bottleneck_layers,
-            conditional_norm=True,
-            embedding_dim=data_shape.y_dim,
+            data_shape, conv_dim, num_bottleneck_layers, conditional_norm=True,
         )
 
     def forward(self, x: Tensor, y: Tensor) -> Tensor:

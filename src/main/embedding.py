@@ -109,6 +109,7 @@ def train_or_load_feature_extractor(
         LOG.info("Returning pretrained ResNet")
         model.load_state_dict(torch.load(save_path))
         model.to(device)
+        model.eval()
         return model.t1
     LOG.info("Training new ResNet")
     model = _train_model(
@@ -122,6 +123,7 @@ def train_or_load_feature_extractor(
         target_input_getter=lambda x, y: y,
     )
     torch.save(model.state_dict(), save_path)
+    model.eval()
     return model.t1
 
 
@@ -150,6 +152,7 @@ def train_embedding(
         target_input_getter=lambda x, _: x,
     )
     torch.save(model.state_dict, save_path)
+    model.eval()
     return model
 
 
@@ -164,13 +167,14 @@ def train_or_load_embedding(
     dataset: AbstractDataset = build_from_yaml(data_config)
     data_shape = dataset.data_shape()
     n_labels = data_shape.y_dim
-    embedding_path = os.path.join(save_dir, "embedding.json")
+    embedding_path = os.path.join(save_dir, "embedding.pt")
     os.makedirs(os.path.dirname(embedding_path), exist_ok=True)
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     if os.path.exists(embedding_path):
         embedding = LabelEmbedding(embedding_dim, n_labels)
         embedding.load_state_dict(torch.load(embedding_path))
         embedding.to(device)
+        embedding.eval()
         return embedding
 
     data_loader = DataLoader(
@@ -180,7 +184,7 @@ def train_or_load_embedding(
         num_workers=n_workers,
         worker_init_fn=seed_worker,
     )
-    resnet_path = os.path.join(save_dir, "feature_extractor.json")
+    resnet_path = os.path.join(save_dir, "feature_extractor.pt")
     os.makedirs(os.path.dirname(resnet_path), exist_ok=True)
     resnet = train_or_load_feature_extractor(
         embedding_dim, dataset, data_loader, device, n_labels, patience, resnet_path

@@ -109,7 +109,9 @@ def train(args: Namespace, hyperparams: Optional[dict]):
             n_neighbours=hyperparams.ccgan_n_neighbours,
         )
         embedding = LabelEmbedding(args.ccgan_embedding_dim, n_labels=data_shape.y_dim)
+        embedding.load_state_dict(torch.load(args.ccgan_embedding_file)())
         embedding.to(device)
+        embedding.eval()
         data_shape.embedding_dim = args.ccgan_embedding_dim
     dataset.set_mode(DataSplit.TRAIN)
 
@@ -168,33 +170,26 @@ def train(args: Namespace, hyperparams: Optional[dict]):
         dataset.set_mode(DataSplit.TRAIN)
         for samples, labels in iter(data_loader):
             if args.ccgan:
-                target_labels, target_weights = (
+                target_labels, labels, sample_weights = (
                     labels["target_labels"],
-                    labels["target_weights"],
+                    labels["labels"],
+                    labels["label_weights"],
                 )
-                labels, sample_weights = labels["labels"], labels["loss_weights"]
             else:
                 sample_weights = torch.ones(args.batch_size)
                 target_labels = dataset.random_targets(labels.shape)
-                target_weights = torch.ones(args.batch_size)
             samples = samples.to(device)
             labels = labels.to(device)
             sample_weights = sample_weights.to(device)
-            target_weights = target_weights.to(device)
             discriminator_opt.zero_grad()
             generator_opt.zero_grad()
 
             target_labels = target_labels.to(device)
 
             embedded_target_labels = embed(target_labels)
-
             with autocast():
                 discriminator_loss = model.discriminator_loss(
-                    samples,
-                    labels,
-                    embedded_target_labels,
-                    sample_weights,
-                    target_weights,
+                    samples, labels, embedded_target_labels, sample_weights,
                 )
             d_scaler.scale(discriminator_loss.total).backward()
             d_scaler.step(discriminator_opt)

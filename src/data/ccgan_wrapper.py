@@ -2,8 +2,10 @@ from collections import defaultdict
 from typing import Tuple
 
 import numpy as np
-from torch import Tensor, tensor
+import torch
+from torch import Size, Tensor, tensor
 from torch.utils.data import Dataset
+from util.dataclasses import DataShape
 from util.enums import DataSplit, VicinityType
 
 from data.abstract_classes import AbstractDataset
@@ -11,7 +13,12 @@ from data.abstract_classes import AbstractDataset
 
 class CcGANDatasetWrapper(AbstractDataset):
     def __init__(
-        self, dataset: Dataset, type: VicinityType, sigma: float, n_neighbours: int, clip=True,
+        self,
+        dataset: Dataset,
+        type: VicinityType,
+        sigma: float,
+        n_neighbours: int,
+        clip=True,
     ) -> None:
         self.type = type
         self.dataset = dataset
@@ -21,8 +28,8 @@ class CcGANDatasetWrapper(AbstractDataset):
         self.clip = clip
         for idx in range(len(self.dataset)):
             _, y = dataset[idx]
-            self.labels[y].append(float(idx))
-        self.unique_labels = np.asarray(self.labels.keys())
+            self.labels[y.item()].append(idx)
+        self.unique_labels = np.asarray(list(self.labels.keys()))
         self.min_label = np.min(self.unique_labels)
         self.max_label = np.max(self.unique_labels)
         # Set according to rule of thumb from CCGAN paper appendix S.9
@@ -54,22 +61,27 @@ class CcGANDatasetWrapper(AbstractDataset):
             )
             if self.clip:
                 target_label = np.clip(target_label, self.min_label, self.max_label)
-            target_weight = 1
         elif self.type is VicinityType.SOFT:
             # TODO
             raise NotImplementedError("TODO")
         return (
             image,
             {
-                "labels": tensor(noisy_label),
-                "loss_weights": tensor(weight),
-                "target_labels": tensor(target_label),
-                "target_weights": tensor(target_weight),
+                "labels": tensor([noisy_label], dtype=torch.float32),
+                "label_weights": tensor(weight, dtype=torch.float32),
+                "target_labels": tensor([target_label], dtype=torch.float32),
             },
         )
+
+    def random_targets(self, shape: Size) -> tensor:
+        return self.dataset.random_targets(shape)
+
+    def data_shape(self) -> DataShape:
+        return self.dataset.data_shape()
 
     def _len(self) -> int:
         return len(self.dataset)
 
     def set_mode(self, mode: DataSplit) -> None:
+        super().set_mode(mode)
         self.dataset.set_mode(mode)

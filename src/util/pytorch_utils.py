@@ -17,14 +17,13 @@ class ConditionalInstanceNorm2d(nn.Module):
         out = self.instance_norm(x)
         gamma = self.gamma(y).view(-1, self.feature_dim, 1, 1)
         beta = self.beta(y).view(-1, self.feature_dim, 1, 1)
-        out += beta + out * gamma
+        out = out + beta + out * gamma
         return out
 
 
 def set_seeds(seed: int):
     np.random.seed(seed)
     torch.manual_seed(seed)
-    random.seed(seed)
 
 
 def seed_worker(worker_id):
