@@ -110,8 +110,8 @@ def train(args: Namespace, hyperparams: Optional[dict]):
         data_shape.embedding_dim = args.ccgan_embedding_dim
     dataset.set_mode(DataSplit.TRAIN)
 
-    class_object: Type = locate(args.model)
-    model: AbstractI2I = class_object(
+    model_class: Type = locate(args.model)
+    model: AbstractI2I = model_class(
         data_shape=data_shape, device=device, **hyperparams
     )
     data_loader = DataLoader(
