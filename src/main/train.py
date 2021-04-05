@@ -46,7 +46,6 @@ def parse_args() -> Tuple[Namespace, dict]:
     parser.add_argument("--n_nodes", type=int, default=1)
     parser.add_argument("--n_gpus", type=int, default=1)
     parser.add_argument("--node_rank", type=int, help="Ranking among nodes", default=0)
-    parser.add_argument("--skip_distributed", action="store_true")
     parser.add_argument("--model", type=str, required=True)
     parser.add_argument("--resume_from", type=int)
     parser.add_argument("--experiment_name", type=str, default="", required=True)
@@ -81,16 +80,13 @@ def parse_args() -> Tuple[Namespace, dict]:
 
 def train(gpu: int, args: Namespace, hyperparams: Optional[dict]):
     rank = args.node_rank * args.n_gpus + gpu
-    if not args.skip_distributed:
-        dist.init_process_group(
-            backend="nccl", init_method="env://", world_size=args.world_size, rank=rank
-        )
+    os.environ["MASTER_ADDR"] = "localhost"
+    os.environ["MASTER_PORT"] = "12355"
+    dist.init_process_group(
+        backend="nccl", init_method="env://", world_size=args.world_size, rank=rank
+    )
 
     torch.cuda.set_device(gpu)
-    if args.run_name is None:
-        run_name = generate_slug(3)
-    wandb.init(project="msc", name=run_name, config=hyperparams, id=run_name)
-    hyperparams = wandb.config
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
     train_conf = TrainingConfig.from_yaml(args.train_config)
@@ -122,17 +118,16 @@ def train(gpu: int, args: Namespace, hyperparams: Optional[dict]):
     model: AbstractI2I = model_class(
         data_shape=data_shape, device=device, **{**hyperparams, **model_hyperparams}
     )
-    if not args.skip_distributed:
-        sampler = torch.utils.data.distributed.DistributedSampler(
-            dataset, num_replicas=args.world_size, rank=rank
-        )
+    sampler = torch.utils.data.distributed.DistributedSampler(
+        dataset, num_replicas=args.world_size, rank=rank
+    )
     data_loader = DataLoader(
         dataset,
         batch_size=args.batch_size,
         shuffle=False,
         num_workers=0,
         pin_memory=True,
-        sampler=sampler if not args.skip_distributed else None,
+        sampler=sampler,
         worker_init_fn=seed_worker,
     )
     discriminator_opt = Adam(model.discriminator_params(), lr=hyperparams.learning_rate)
@@ -143,7 +138,7 @@ def train(gpu: int, args: Namespace, hyperparams: Optional[dict]):
         if train_conf.log_frequency_metric is FrequencyMetric.ITERATIONS
         else len(dataset)
     )
-    checkpoint_dir = path.join(args.checkpoint_dir, run_name)
+    checkpoint_dir = path.join(args.checkpoint_dir, args.run_name)
     os.makedirs(checkpoint_dir, exist_ok=True)
     loss_logger = Logger(log_frequency)
     if args.resume_from is not None:
@@ -159,15 +154,14 @@ def train(gpu: int, args: Namespace, hyperparams: Optional[dict]):
         if train_conf.checkpoint_frequency_metric is FrequencyMetric.ITERATIONS
         else len(dataset)
     )
-    if not args.skip_distributed:
-        model = nn.parallel.DistributedDataParallel(model, device_ids=[gpu])
+    model = nn.parallel.DistributedDataParallel(model, device_ids=[gpu])
     model.to(device)
     g_scaler = GradScaler()
     d_scaler = GradScaler()
     step = 0
     d_updates_per_g_update = 5
-    wandb.init(project=args.experiment_name)
-    wandb.watch(model)
+    if rank == 0:
+        wandb.watch(model)
 
     def embed(x):
         return embedding(x) if args.ccgan else x
@@ -216,13 +210,13 @@ def train(gpu: int, args: Namespace, hyperparams: Optional[dict]):
                 g_scaler.scale(generator_loss.total).backward()
                 g_scaler.step(generator_opt)
                 g_scaler.update()
-
-            loss_logger.track_loss(
-                generator_loss.to_plain_datatypes(),
-                discriminator_loss.to_plain_datatypes(),
-            )
+            if rank == 0:
+                loss_logger.track_loss(
+                    generator_loss.to_plain_datatypes(),
+                    discriminator_loss.to_plain_datatypes(),
+                )
             step += 1
-            if step % checkpoint_frequency == 0:
+            if step % checkpoint_frequency == 0 and rank == 0:
                 with open(path.join(checkpoint_dir, "optimizers.json"), "w") as f:
                     torch.save(
                         {
@@ -260,13 +254,14 @@ def train(gpu: int, args: Namespace, hyperparams: Optional[dict]):
                         )
                     )
         # Log the last batch of images
-        generated_examples = generated[:10].cpu()
-        loss_logger.track_images(
-            samples[:10], generated_examples, ground_truth[:10], target_labels[:10]
-        )
+        if rank == 0:
+            generated_examples = generated[:10].cpu()
+            loss_logger.track_images(
+                samples[:10], generated_examples, ground_truth[:10], target_labels[:10]
+            )
 
-        val_norm = total_norm / (len(dataset) * n_attempts)
-        loss_logger.track_summary_metric("val_norm", val_norm)
+            val_norm = total_norm / (len(dataset) * n_attempts)
+            loss_logger.track_summary_metric("val_norm", val_norm)
 
     # Training finished
     model.save_checkpoint(step, checkpoint_dir)
@@ -274,13 +269,13 @@ def train(gpu: int, args: Namespace, hyperparams: Optional[dict]):
 
 
 def main():
-    set_seeds(seed=0)
     args, hyperparams = parse_args()
     args.world_size = args.n_gpus * args.n_nodes
-    if args.skip_distributed:
-        train(0, args, hyperparams)
-    else:
-        mp.spawn(train, nprocs=args.n_gpus, args=(args, hyperparams))
+    if args.run_name is None:
+        args.run_name = generate_slug(3)
+    wandb.init(project="msc", name=args.run_name, config=hyperparams, id=args.run_name)
+    set_seeds(seed=0)
+    mp.spawn(train, nprocs=args.n_gpus, args=(args, wandb.config))
 
 
 if __name__ == "__main__":
