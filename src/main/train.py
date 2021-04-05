@@ -67,9 +67,19 @@ def parse_args() -> Tuple[Namespace, dict]:
     parser.add_argument("--ccgan_embedding_dim", type=int)
     args, unknown = parser.parse_known_args()
     # map hyperparams like  ['--learning_rate', 0.5, ...] to paired dict items
-    hyperparams = (
+    hyperparam_args = (
         {k[2:]: v for k, v in zip(unknown[::2], unknown[1::2])} if unknown else None
     )
+    hyperparams = {}
+    for k, v in hyperparam_args.items():
+        try:
+            v = float(v)
+            if v.is_integer():
+                v = int(v)
+        except ValueError:
+            pass
+        hyperparams[k] = v
+
     return args, hyperparams
 
 
@@ -83,7 +93,7 @@ def train(args: Namespace, hyperparams: Optional[dict]):
     train_conf = TrainingConfig.from_yaml(args.train_config)
     dataset: AbstractDataset = build_from_yaml(args.data_config)
     data_shape = dataset.data_shape()
-    if train_conf.ccgan:
+    if args.ccgan:
         vicinity_type = (
             VicinityType.HARD
             if args.ccgan_vicinity_type == "hard"
@@ -145,13 +155,13 @@ def train(args: Namespace, hyperparams: Optional[dict]):
     wandb.watch(model)
 
     def embed(x):
-        return embedding(x) if train_conf.ccgan else x
+        return embedding(x) if args.ccgan else x
 
     for epoch in trange(args.epochs, desc="Epoch"):
         model.set_train()
         dataset.set_mode(DataSplit.TRAIN)
         for samples, labels in iter(data_loader):
-            if train_conf.ccgan:
+            if args.ccgan:
                 target_labels, target_weights = (
                     labels["target_labels"],
                     labels["target_weights"],
