@@ -102,7 +102,7 @@ class FPGAN(nn.Module, AbstractI2I):
         self,
         input_image: Tensor,
         input_label: Tensor,
-        target_label: Tensor,
+        embedded_target_label: Tensor,
         sample_weights: Tensor,
         target_weights: Tensor,
     ) -> DiscriminatorLoss:
@@ -116,7 +116,7 @@ class FPGAN(nn.Module, AbstractI2I):
             sample_weights * self.square_error(labels, input_label)
         )
         # Discriminator losses with fake images
-        fake_image = self.generator.transform(input_image, target_label)
+        fake_image = self.generator.transform(input_image, embedded_target_label)
         sources, _ = self.discriminator(fake_image)
         classification_fake = torch.mean(
             target_weights * sources
@@ -154,16 +154,21 @@ class FPGAN(nn.Module, AbstractI2I):
         )
 
     def generator_loss(
-        self, input_image: Tensor, input_label: Tensor, target_label: Tensor
+        self,
+        input_image: Tensor,
+        input_label: Tensor,
+        embedded_input_label: Tensor,
+        target_label: Tensor,
+        embedded_target_label: Tensor,
     ) -> GeneratorLoss:
         # Input to target
-        fake_image = self.generator.transform(input_image, target_label)
+        fake_image = self.generator.transform(input_image, embedded_target_label)
         sources, labels = self.discriminator(fake_image)
         g_loss_fake = -torch.mean(sources)
         g_loss_mse = self.hyperparams.l_mse * self.mse(labels, target_label)
 
         # Input to input
-        id_image = self.generator.transform(input_image, input_label)
+        id_image = self.generator.transform(input_image, embedded_input_label)
         sources, labels = self.discriminator(id_image)
         g_loss_fake_id = -torch.mean(sources)
         g_loss_mse_id = self.hyperparams.l_mse * self.mse(labels, input_label)
@@ -172,14 +177,14 @@ class FPGAN(nn.Module, AbstractI2I):
         )
 
         # Target to input
-        reconstructed_image = self.generator.transform(fake_image, input_label)
+        reconstructed_image = self.generator.transform(fake_image, embedded_input_label)
         g_loss_rec = self.hyperparams.l_rec * torch.mean(
             torch.abs(input_image - reconstructed_image)
         )
 
         # Input to input to input
         # TODO: Why do they do this?
-        reconstructed_id = self.generator.transform(id_image, input_label)
+        reconstructed_id = self.generator.transform(id_image, embedded_input_label)
         g_loss_rec_id = self.hyperparams.l_rec * torch.mean(
             torch.abs(input_image - reconstructed_id)
         )

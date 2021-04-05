@@ -2,6 +2,23 @@ import random
 
 import numpy as np
 import torch
+from torch import Tensor, nn
+
+
+class ConditionalInstanceNorm2d(nn.Module):
+    def __init__(self, embedding_dim, feature_dim):
+        super().__init__()
+        self.feature_dim = feature_dim
+        self.instance_norm = nn.InstanceNorm2d(feature_dim, affine=False)
+        self.gamma = nn.Linear(embedding_dim, feature_dim, bias=False)
+        self.beta = nn.Linear(embedding_dim, feature_dim, bias=False)
+
+    def forward(self, x: Tensor, y: Tensor) -> Tensor:
+        out = self.instance_norm(x)
+        gamma = self.gamma(y).view(-1, self.feature_dim, 1, 1)
+        beta = self.beta(y).view(-1, self.feature_dim, 1, 1)
+        out += beta + out * gamma
+        return out
 
 
 def set_seeds(seed: int):

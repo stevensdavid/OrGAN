@@ -6,8 +6,9 @@ from torch import Tensor, nn
 from torch.cuda.amp import autocast
 from torchvision.models import resnet18
 from util.dataclasses import DataShape
-from util.enums import CcGANInputMechanism
+from util.pytorch_utils import ConditionalInstanceNorm2d
 
+from models import patchgan
 from models.fpgan import FPGAN
 
 
@@ -65,6 +66,27 @@ class ConvLabelClassifier(nn.Module):
         return self.t1(x)
 
 
+class CCGenerator(patchgan.Generator):
+    def __init__(
+        self, data_shape: DataShape, conv_dim: int, num_bottleneck_layers: int
+    ):
+        super().__init__(
+            data_shape,
+            conv_dim,
+            num_bottleneck_layers,
+            conditional_norm=True,
+            embedding_dim=data_shape.y_dim,
+        )
+
+    def forward(self, x: Tensor, y: Tensor) -> Tensor:
+        for layer in self.layers:
+            if isinstance(layer, ConditionalInstanceNorm2d):
+                x = layer(x, y)
+            else:
+                x = layer(x)
+        return x
+
+
 class CCFPGAN(FPGAN):
     def __init__(
         self,
@@ -78,7 +100,6 @@ class CCFPGAN(FPGAN):
         l_rec: float,
         l_id: float,
         l_grad_penalty: float,
-        input_mechanism: CcGANInputMechanism,
         **kwargs
     ):
         super().__init__(
@@ -94,4 +115,5 @@ class CCFPGAN(FPGAN):
             l_grad_penalty,
             **kwargs
         )
+        self.generator = CCGenerator(data_shape, g_conv_dim, g_num_bottleneck)
 

@@ -15,7 +15,6 @@ from data.ccgan_wrapper import CcGANDatasetWrapper
 from data.fashion_mnist import HSVFashionMNIST
 from models.abstract_model import AbstractI2I
 from models.ccgan import LabelEmbedding
-from torch import nn
 from torch.cuda.amp import GradScaler, autocast
 from torch.optim import Adam
 from torch.utils.data import DataLoader
@@ -90,10 +89,14 @@ def train(args: Namespace, hyperparams: Optional[dict]):
             else VicinityType.SOFT
         )
         dataset = CcGANDatasetWrapper(
-            dataset, type=vicinity_type, sigma=hyperparams.ccgan_sigma,
+            dataset,
+            type=vicinity_type,
+            sigma=hyperparams.ccgan_sigma,
+            n_neighbours=hyperparams.ccgan_n_neighbours,
         )
         embedding = LabelEmbedding(args.ccgan_embedding_dim, n_labels=data_shape.y_dim)
         embedding.to(device)
+        data_shape.embedding_dim = args.ccgan_embedding_dim
     dataset.set_mode(DataSplit.TRAIN)
 
     class_object: Type = locate(args.model)
@@ -140,6 +143,9 @@ def train(args: Namespace, hyperparams: Optional[dict]):
     wandb.init(project=args.experiment_name)
     wandb.watch(model)
 
+    def embed(x):
+        return embedding(x) if train_conf.ccgan else x
+
     for epoch in trange(args.epochs, desc="Epoch"):
         model.set_train()
         dataset.set_mode(DataSplit.TRAIN)
@@ -162,23 +168,31 @@ def train(args: Namespace, hyperparams: Optional[dict]):
             generator_opt.zero_grad()
 
             target_labels = target_labels.to(device)
-            if train_conf.ccgan:
-                labels = embedding(labels)
-                target_labels = embedding(target_labels)
+
+            embedded_target_labels = embed(target_labels)
 
             with autocast():
                 discriminator_loss = model.discriminator_loss(
-                    samples, labels, target_labels, sample_weights, target_weights
+                    samples,
+                    labels,
+                    embedded_target_labels,
+                    sample_weights,
+                    target_weights,
                 )
             d_scaler.scale(discriminator_loss.total).backward()
             d_scaler.step(discriminator_opt)
             d_scaler.update()
 
             if step % d_updates_per_g_update == 0:
+                embedded_labels = embed(labels)
                 # Update generator less often
                 with autocast():
                     generator_loss = model.generator_loss(
-                        samples, labels, target_labels
+                        samples,
+                        labels,
+                        embedded_labels,
+                        target_labels,
+                        embedded_target_labels,
                     )
                 g_scaler.scale(generator_loss.total).backward()
                 g_scaler.step(generator_opt)
@@ -211,11 +225,13 @@ def train(args: Namespace, hyperparams: Optional[dict]):
                 cuda_samples = samples.to(device)
                 for attempt in range(n_attempts):
                     target_labels = dataset.random_targets(len(samples))
-                    cuda_labels = target_labels.to(device)
+                    cuda_labels = torch.unsqueeze(target_labels, 1).to(device)
+                    generator_labels = embed(cuda_labels)
+
                     dataset: HSVFashionMNIST  # TODO: break assumption
                     ground_truth = dataset.ground_truths(samples, target_labels)
                     generated = model.generator.transform(
-                        cuda_samples, torch.unsqueeze(cuda_labels, 1)
+                        cuda_samples, generator_labels
                     )
                     total_norm += torch.sum(
                         torch.linalg.norm(

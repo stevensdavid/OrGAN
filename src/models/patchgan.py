@@ -3,22 +3,38 @@ from typing import Tuple
 import torch
 from torch import Tensor, nn
 from util.dataclasses import DataShape
+from util.pytorch_utils import ConditionalInstanceNorm2d
 
 from models.abstract_model import AbstractGenerator
 
 
 class Generator(nn.Module, AbstractGenerator):
     def __init__(
-        self, data_shape: DataShape, conv_dim: int, num_bottleneck_layers: int
+        self,
+        data_shape: DataShape,
+        conv_dim: int,
+        num_bottleneck_layers: int,
+        conditional_norm: bool = False,
     ):
         super().__init__()
-        instance_norm = lambda dim: nn.InstanceNorm2d(
-            dim, affine=True, track_running_stats=True
-        )
+        if conditional_norm:
+            instance_norm = lambda dim: ConditionalInstanceNorm2d(
+                data_shape.embedding_dim, dim
+            )
+        else:
+            instance_norm = lambda dim: nn.InstanceNorm2d(
+                dim, affine=True, track_running_stats=True
+            )
+
         relu = lambda: nn.ReLU(inplace=True)
+        input_channels = (
+            data_shape.n_channels
+            if conditional_norm
+            else data_shape.n_channels + data_shape.y_dim
+        )
         layers = [
             nn.Conv2d(
-                data_shape.y_dim + data_shape.n_channels,
+                input_channels,
                 conv_dim,
                 kernel_size=7,
                 stride=1,

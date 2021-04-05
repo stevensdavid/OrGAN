@@ -16,7 +16,3 @@ class VicinityType(Enum):
     HARD = auto()
     SOFT = auto()
 
-
-class CcGANInputMechanism(Enum):
-    NAIVE = auto()
-    IMPROVED = auto()

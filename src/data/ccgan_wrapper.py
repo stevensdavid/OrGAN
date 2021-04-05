@@ -11,18 +11,13 @@ from data.abstract_classes import AbstractDataset
 
 class CcGANDatasetWrapper(AbstractDataset):
     def __init__(
-        self,
-        dataset: Dataset,
-        type: VicinityType,
-        sigma: float,
-        hyperparam: float,
-        clip=True,
+        self, dataset: Dataset, type: VicinityType, sigma: float, n_neighbours: int, clip=True,
     ) -> None:
         self.type = type
         self.dataset = dataset
         self.sigma = sigma
         self.labels = defaultdict(list)
-        self.hyperparam = hyperparam
+
         self.clip = clip
         for idx in range(len(self.dataset)):
             _, y = dataset[idx]
@@ -30,6 +25,13 @@ class CcGANDatasetWrapper(AbstractDataset):
         self.unique_labels = np.asarray(self.labels.keys())
         self.min_label = np.min(self.unique_labels)
         self.max_label = np.max(self.unique_labels)
+        # Set according to rule of thumb from CCGAN paper appendix S.9
+        kappa_base = np.max(self.unique_labels[1:] - self.unique_labels[:-1])
+        kappa = n_neighbours * kappa_base
+        if type is VicinityType.HARD:
+            self.hyperparam = kappa
+        elif type is VicinityType.SOFT:
+            self.hyperparam = 1 / (kappa ** 2)
 
     def _getitem(self, _: int) -> Tuple[Tensor, Tensor]:
         sample_label = np.random.choice(self.unique_labels)

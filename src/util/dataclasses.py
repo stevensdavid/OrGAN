@@ -42,6 +42,7 @@ class DataShape:
     y_dim: int
     n_channels: int
     x_size: int
+    embedding_dim: int = None
 
 
 @dataclass
