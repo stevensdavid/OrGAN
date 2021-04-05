@@ -18,7 +18,7 @@ class Generator(nn.Module, AbstractGenerator):
         relu = lambda: nn.ReLU(inplace=True)
         layers = [
             nn.Conv2d(
-                data_shape.y_dim + 3,  # TODO: why +3?
+                data_shape.y_dim + data_shape.n_channels,
                 conv_dim,
                 kernel_size=7,
                 stride=1,
@@ -79,7 +79,6 @@ class Generator(nn.Module, AbstractGenerator):
         self.layers = nn.Sequential(*layers)
 
     def forward(self, x: Tensor, y: Tensor) -> Tensor:
-        # TODO: clarify this part
         y = y.view(y.size(0), y.size(1), 1, 1)
         y = y.repeat(1, 1, x.size(2), x.size(3))
         x = torch.cat([x, y], dim=1)
