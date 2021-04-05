@@ -6,8 +6,9 @@ from typing import Optional, Tuple, Type
 
 import torch
 import torch.cuda
-import torch.distributed
+import torch.distributed as dist
 import torch.linalg
+import torch.multiprocessing as mp
 import wandb
 from coolname import generate_slug
 from data.abstract_classes import AbstractDataset
@@ -15,6 +16,7 @@ from data.ccgan_wrapper import CcGANDatasetWrapper
 from data.fashion_mnist import HSVFashionMNIST
 from models.abstract_model import AbstractI2I
 from models.ccgan import LabelEmbedding
+from torch import nn
 from torch.cuda.amp import GradScaler, autocast
 from torch.optim import Adam
 from torch.utils.data import DataLoader
@@ -24,18 +26,6 @@ from util.enums import DataSplit, FrequencyMetric, VicinityType
 from util.logging import Logger
 from util.object_loader import build_from_yaml, load_yaml
 from util.pytorch_utils import seed_worker, set_seeds
-
-
-class DataParallelExtension(torch.nn.DataParallel):
-    """
-    Allow nn.DataParallel to call model's attributes.
-    """
-
-    def __getattr__(self, name):
-        try:
-            return super().__getattr__(name)
-        except AttributeError:
-            return getattr(self.module, name)
 
 
 def parse_args() -> Tuple[Namespace, dict]:
@@ -53,11 +43,14 @@ def parse_args() -> Tuple[Namespace, dict]:
         help="Directory to save and load checkpoints from",
         required=True,
     )
+    parser.add_argument("--n_nodes", type=int, default=1)
+    parser.add_argument("--n_gpus", type=int, default=1)
+    parser.add_argument("--node_rank", type=int, help="Ranking among nodes", default=0)
+    parser.add_argument("--skip_distributed", action="store_true")
     parser.add_argument("--model", type=str, required=True)
     parser.add_argument("--resume_from", type=int)
     parser.add_argument("--experiment_name", type=str, default="", required=True)
     parser.add_argument("--batch_size", type=int, required=True)
-    parser.add_argument("--n_workers", type=int, default=0)
     parser.add_argument("--run_name", type=str)
     parser.add_argument("--ccgan", action="store_true")
     parser.add_argument("--ccgan_vicinity_type", type=str, choices=["hard", "soft"])
@@ -86,7 +79,14 @@ def parse_args() -> Tuple[Namespace, dict]:
     return args, hyperparams
 
 
-def train(args: Namespace, hyperparams: Optional[dict]):
+def train(gpu: int, args: Namespace, hyperparams: Optional[dict]):
+    rank = args.node_rank * args.n_gpus + gpu
+    if not args.skip_distributed:
+        dist.init_process_group(
+            backend="nccl", init_method="env://", world_size=args.world_size, rank=rank
+        )
+
+    torch.cuda.set_device(gpu)
     if args.run_name is None:
         run_name = generate_slug(3)
     wandb.init(project="msc", name=run_name, config=hyperparams, id=run_name)
@@ -122,11 +122,17 @@ def train(args: Namespace, hyperparams: Optional[dict]):
     model: AbstractI2I = model_class(
         data_shape=data_shape, device=device, **{**hyperparams, **model_hyperparams}
     )
+    if not args.skip_distributed:
+        sampler = torch.utils.data.distributed.DistributedSampler(
+            dataset, num_replicas=args.world_size, rank=rank
+        )
     data_loader = DataLoader(
         dataset,
         batch_size=args.batch_size,
-        shuffle=True,
-        num_workers=args.n_workers,
+        shuffle=False,
+        num_workers=0,
+        pin_memory=True,
+        sampler=sampler if not args.skip_distributed else None,
         worker_init_fn=seed_worker,
     )
     discriminator_opt = Adam(model.discriminator_params(), lr=hyperparams.learning_rate)
@@ -153,7 +159,8 @@ def train(args: Namespace, hyperparams: Optional[dict]):
         if train_conf.checkpoint_frequency_metric is FrequencyMetric.ITERATIONS
         else len(dataset)
     )
-    model = DataParallelExtension(model)
+    if not args.skip_distributed:
+        model = nn.parallel.DistributedDataParallel(model, device_ids=[gpu])
     model.to(device)
     g_scaler = GradScaler()
     d_scaler = GradScaler()
@@ -178,13 +185,13 @@ def train(args: Namespace, hyperparams: Optional[dict]):
             else:
                 sample_weights = torch.ones(args.batch_size)
                 target_labels = dataset.random_targets(labels.shape)
-            samples = samples.to(device)
-            labels = labels.to(device)
-            sample_weights = sample_weights.to(device)
+            samples = samples.to(device, non_blocking=True)
+            labels = labels.to(device, non_blocking=True)
+            sample_weights = sample_weights.to(device, non_blocking=True)
             discriminator_opt.zero_grad()
             generator_opt.zero_grad()
 
-            target_labels = target_labels.to(device)
+            target_labels = target_labels.to(device, non_blocking=True)
 
             embedded_target_labels = embed(target_labels)
             with autocast():
@@ -234,10 +241,12 @@ def train(args: Namespace, hyperparams: Optional[dict]):
         dataset.set_mode(DataSplit.VAL)
         with torch.no_grad():
             for samples, _ in iter(data_loader):
-                cuda_samples = samples.to(device)
+                cuda_samples = samples.to(device, non_blocking=True)
                 for attempt in range(n_attempts):
                     target_labels = dataset.random_targets(len(samples))
-                    cuda_labels = torch.unsqueeze(target_labels, 1).to(device)
+                    cuda_labels = torch.unsqueeze(target_labels, 1).to(
+                        device, non_blocking=True
+                    )
                     generator_labels = embed(cuda_labels)
 
                     dataset: HSVFashionMNIST  # TODO: break assumption
@@ -267,7 +276,11 @@ def train(args: Namespace, hyperparams: Optional[dict]):
 def main():
     set_seeds(seed=0)
     args, hyperparams = parse_args()
-    train(args, hyperparams)
+    args.world_size = args.n_gpus * args.n_nodes
+    if args.skip_distributed:
+        train(0, args, hyperparams)
+    else:
+        mp.spawn(train, nprocs=args.n_gpus, args=(args, hyperparams))
 
 
 if __name__ == "__main__":
