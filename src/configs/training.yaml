@@ -2,4 +2,3 @@ checkpoint_frequency: 1000
 checkpoint_frequency_metric: epochs
 log_frequency: 10
 log_frequency_metric: iterations
-ccgan: false

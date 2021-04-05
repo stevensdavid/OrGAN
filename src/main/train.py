@@ -59,6 +59,7 @@ def parse_args() -> Tuple[Namespace, dict]:
     parser.add_argument("--batch_size", type=int, required=True)
     parser.add_argument("--n_workers", type=int, default=0)
     parser.add_argument("--run_name", type=str)
+    parser.add_argument("--ccgan", action="store_true")
     parser.add_argument("--ccgan_vicinity_type", type=str, choices=["hard", "soft"])
     parser.add_argument(
         "--ccgan_embedding_file", type=str, help="CcGAN embedding module"

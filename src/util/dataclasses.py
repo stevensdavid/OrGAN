@@ -51,7 +51,6 @@ class TrainingConfig:
     checkpoint_frequency_metric: FrequencyMetric
     log_frequency: int
     log_frequency_metric: FrequencyMetric
-    ccgan: bool
 
     @staticmethod
     def from_yaml(filepath: str) -> TrainingConfig:
