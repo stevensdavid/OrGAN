@@ -22,7 +22,7 @@ from tqdm import trange
 from util.dataclasses import TrainingConfig
 from util.enums import DataSplit, FrequencyMetric, VicinityType
 from util.logging import Logger
-from util.object_loader import build_from_yaml
+from util.object_loader import build_from_yaml, load_yaml
 from util.pytorch_utils import seed_worker, set_seeds
 
 
@@ -63,6 +63,9 @@ def parse_args() -> Tuple[Namespace, dict]:
     parser.add_argument("--ccgan_vicinity_type", type=str, choices=["hard", "soft"])
     parser.add_argument(
         "--ccgan_embedding_file", type=str, help="CcGAN embedding module"
+    )
+    parser.add_argument(
+        "--model_hyperparams", type=str, help="YAML file with hyperparams for model"
     )
     parser.add_argument("--ccgan_embedding_dim", type=int)
     args, unknown = parser.parse_known_args()
@@ -110,9 +113,12 @@ def train(args: Namespace, hyperparams: Optional[dict]):
         data_shape.embedding_dim = args.ccgan_embedding_dim
     dataset.set_mode(DataSplit.TRAIN)
 
+    model_hyperparams = {}
+    if args.model_hyperparams:
+        model_hyperparams = load_yaml(args.model_hyperparams)
     model_class: Type = locate(args.model)
     model: AbstractI2I = model_class(
-        data_shape=data_shape, device=device, **hyperparams
+        data_shape=data_shape, device=device, **{**hyperparams, **model_hyperparams}
     )
     data_loader = DataLoader(
         dataset,
