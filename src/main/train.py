@@ -101,13 +101,10 @@ def train(gpu: int, args: Namespace):
     if rank == 0:
         wandb.init(project="msc", name=args.run_name, config=args, id=args.run_name)
         hyperparams = {**vars(args), **wandb.config}
+        print(f"Config: {hyperparams}")
         datastore.set("hyperparams", json.dumps(hyperparams))
     dist.barrier()
     hyperparams = json.loads(datastore.get("hyperparams"))
-
-    # share config between processes
-    # dist.broadcast_object_list(hyperparams, src=0)
-    print(f"Rank {rank} received {hyperparams}")
 
     torch.cuda.set_device(gpu)
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
