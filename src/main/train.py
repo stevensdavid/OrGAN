@@ -306,9 +306,10 @@ def train(gpu: int, args: Namespace, train_conf: TrainingConfig):
 
                     val_dataset: HSVFashionMNIST  # TODO: break assumption
                     ground_truth = val_dataset.ground_truths(samples, target_labels)
-                    generated = model.module.generator.transform(
-                        cuda_samples, generator_labels
-                    )
+                    with autocast():
+                        generated = model.module.generator.transform(
+                            cuda_samples, generator_labels
+                        )
                     total_norm += torch.sum(
                         torch.linalg.norm(
                             torch.tensor(ground_truth, device=device) - generated, dim=0
