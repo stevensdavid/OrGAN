@@ -1,5 +1,7 @@
+import json
 import os
 from argparse import ArgumentParser, Namespace
+from datetime import timedelta
 from os import path
 from pydoc import locate
 from typing import Optional, Tuple, Type
@@ -82,20 +84,31 @@ def train(gpu: int, args: Namespace, hyperparams: Optional[dict]):
     rank = args.node_rank * args.n_gpus + gpu
     os.environ["MASTER_ADDR"] = "localhost"
     os.environ["MASTER_PORT"] = "12355"
+    os.environ["STORE_ADDR"] = "localhost"
+    os.environ["STORE_PORT"] = 12344
     dist.init_process_group(
         backend="nccl", init_method="env://", world_size=args.world_size, rank=rank
     )
 
+    datastore = dist.TCPStore(
+        host_name=os.environ["STORE_ADDR"],
+        port=os.environ["STORE_PORT"],
+        world_size=args.world_size,
+        is_master=rank == 0,
+        timeout=timedelta(seconds=10),
+    )
     if rank == 0:
         wandb.init(
             project="msc", name=args.run_name, config=hyperparams, id=args.run_name
         )
         hyperparams = {**hyperparams, **wandb.config}
-    else:
-        hyperparams = [None]
+        datastore.set("hyperparams", json.dumps(hyperparams))
+    dist.barrier()
+    hyperparams = json.loads(datastore.get("hyperparams"))
+
     # share config between processes
-    dist.broadcast_object_list(hyperparams, src=0)
-    hyperparams = hyperparams[0]
+    # dist.broadcast_object_list(hyperparams, src=0)
+    print(f"Rank {rank} received {hyperparams}")
 
     torch.cuda.set_device(gpu)
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
@@ -239,6 +252,7 @@ def train(gpu: int, args: Namespace, hyperparams: Optional[dict]):
                 loss_logger.save(checkpoint_dir)
                 model.save_checkpoint(step, checkpoint_dir)
         # Validate
+        dist.barrier()
         model.set_eval()
         # TODO: generalize this to other data sets
         total_norm = 0
