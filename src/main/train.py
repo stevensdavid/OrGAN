@@ -239,7 +239,7 @@ def train(gpu: int, args: Namespace, train_conf: TrainingConfig):
                 )
             else:
                 sample_weights = torch.ones(args.batch_size)
-                target_labels = dataset.random_targets(labels.shape)
+                target_labels = train_dataset.random_targets(labels.shape)
             samples = samples.to(device, non_blocking=True)
             labels = labels.to(device, non_blocking=True)
             sample_weights = sample_weights.to(device, non_blocking=True)
