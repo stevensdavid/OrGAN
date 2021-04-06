@@ -63,19 +63,20 @@ def parse_args() -> Tuple[Namespace, dict]:
     parser.add_argument("--args_file", type=str, help="YAML file with CLI args")
     parser.add_argument("--ccgan_embedding_dim", type=int)
     args, unknown = parser.parse_known_args()
-    # map hyperparams like  ['--learning_rate', 0.5, ...] to paired dict items
-    hyperparam_args = (
-        {k[2:]: v for k, v in zip(unknown[::2], unknown[1::2])} if unknown else None
-    )
-    hyperparams = {}
-    for k, v in hyperparam_args.items():
-        try:
-            v = float(v)
-            if v.is_integer():
-                v = int(v)
-        except ValueError:
-            pass
-        hyperparams[k] = v
+    if unknown:
+        # map hyperparams like  ['--learning_rate', 0.5, ...] to paired dict items
+        hyperparam_args = (
+            {k[2:]: v for k, v in zip(unknown[::2], unknown[1::2])} if unknown else None
+        )
+        hyperparams = {}
+        for k, v in hyperparam_args.items():
+            try:
+                v = float(v)
+                if v.is_integer():
+                    v = int(v)
+            except ValueError:
+                pass
+            hyperparams[k] = v
 
     return args, hyperparams
 
