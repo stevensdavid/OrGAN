@@ -191,7 +191,7 @@ def train(gpu: int, args: Namespace, hyperparams: Optional[dict]):
         return embedding(x) if args.ccgan else x
 
     for epoch in trange(args.epochs, desc="Epoch"):
-        model.set_train()
+        model.module.set_train()
         dataset.set_mode(DataSplit.TRAIN)
         for samples, labels in iter(data_loader):
             if args.ccgan:
@@ -213,7 +213,7 @@ def train(gpu: int, args: Namespace, hyperparams: Optional[dict]):
 
             embedded_target_labels = embed(target_labels)
             with autocast():
-                discriminator_loss = model.discriminator_loss(
+                discriminator_loss = model.module.discriminator_loss(
                     samples, labels, embedded_target_labels, sample_weights,
                 )
             d_scaler.scale(discriminator_loss.total).backward()
@@ -224,7 +224,7 @@ def train(gpu: int, args: Namespace, hyperparams: Optional[dict]):
                 embedded_labels = embed(labels)
                 # Update generator less often
                 with autocast():
-                    generator_loss = model.generator_loss(
+                    generator_loss = model.module.generator_loss(
                         samples,
                         labels,
                         embedded_labels,
@@ -250,10 +250,10 @@ def train(gpu: int, args: Namespace, hyperparams: Optional[dict]):
                         f,
                     )
                 loss_logger.save(checkpoint_dir)
-                model.save_checkpoint(step, checkpoint_dir)
+                model.module.save_checkpoint(step, checkpoint_dir)
         # Validate
         dist.barrier()
-        model.set_eval()
+        model.module.set_eval()
         # TODO: generalize this to other data sets
         total_norm = 0
         n_attempts = 5
@@ -270,7 +270,7 @@ def train(gpu: int, args: Namespace, hyperparams: Optional[dict]):
 
                     dataset: HSVFashionMNIST  # TODO: break assumption
                     ground_truth = dataset.ground_truths(samples, target_labels)
-                    generated = model.generator.transform(
+                    generated = model.module.generator.transform(
                         cuda_samples, generator_labels
                     )
                     total_norm += torch.sum(
@@ -291,7 +291,7 @@ def train(gpu: int, args: Namespace, hyperparams: Optional[dict]):
             loss_logger.track_summary_metric("val_norm", val_norm)
 
     # Training finished
-    model.save_checkpoint(step, checkpoint_dir)
+    model.module.save_checkpoint(step, checkpoint_dir)
     loss_logger.finish()
 
 
