@@ -4,22 +4,7 @@ command:
   - python
   - "-m"
   - ${program}
-  - "--epochs"
-  - 300
-  - "--data_config"
-  - "configs/datasets/hue_f_mnist.yaml"
-  - "--checkpoint_dir"
-  - /checkpoints
-  - "--experiment_name"
-  - HSV_FPGAN
-  - --batch_size
-  - 512
-  - --n_workers
-  - 8
-  - --train_config
-  - "configs/training.yaml"
-  - --model
-  - "models.fpgan.FPGAN"
+  - "configs/sweeps/args/hue_fpgan_args.yaml"
 method: bayes
 early_terminate:
   type: hyperband
@@ -28,21 +13,6 @@ metric:
   name: val_norm
   goal: minimize
 parameters:
-  learning_rate:
-    min: 0.001
-    max: 0.1
-  g_conv_dim:
-    min: 8
-    max: 128
-  g_num_bottleneck:
-    min: 1
-    max: 5
-  d_conv_dim:
-    min: 8
-    max: 128
-  d_num_scales:
-    min: 1
-    max: 5
   l_mse:
     min: 0.1
     max: 10
