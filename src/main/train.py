@@ -149,6 +149,7 @@ def train(gpu: int, args: Namespace, train_conf: TrainingConfig):
             sigma=hyperparams["ccgan_sigma"],
             n_neighbours=hyperparams["ccgan_n_neighbours"],
         )
+        train_dataset.set_mode(DataSplit.TRAIN)
         embedding = LabelEmbedding(args.ccgan_embedding_dim, n_labels=data_shape.y_dim)
         embedding.load_state_dict(torch.load(args.ccgan_embedding_file)())
         embedding.to(device)
