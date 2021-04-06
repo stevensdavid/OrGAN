@@ -57,6 +57,9 @@ def parse_args() -> Tuple[Namespace, dict]:
     parser.add_argument(
         "--ccgan_embedding_file", type=str, help="CcGAN embedding module"
     )
+    parser.add_argument(
+        "--model_hyperparams", type=str, help="YAML file with model kwargs"
+    )
     parser.add_argument("--args_file", type=str, help="YAML file with CLI args")
     parser.add_argument("--ccgan_embedding_dim", type=int)
     args, unknown = parser.parse_known_args()
@@ -292,6 +295,8 @@ def main():
     if args.args_file:
         # note order: explicit hyperparams take precedent
         hyperparams = {**load_yaml(args.args_file), **hyperparams}
+    if args.model_hyperparams:
+        hyperparams = {**load_yaml(args.model_hyperparams), **hyperparams}
     # merge file hyperparams, unknown flags and known into one namespace
     cli_flags = vars(args)
     vars(args).update({**hyperparams, **cli_flags})
