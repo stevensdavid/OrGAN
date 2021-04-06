@@ -8,7 +8,7 @@ model: models.ccgan.CCFPGAN
 model_hyperparams: configs/models/fpgan.yaml
 n_nodes: 1
 n_gpus: 4
-node_rank: 4
+node_rank: 1
 ccgan: True
 ccgan_vicinity_type: hard
 ccgan_embedding_file: /storage/checkpoints/embeddings/hsv_fmnist/embedding.pt

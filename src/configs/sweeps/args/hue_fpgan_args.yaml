@@ -8,5 +8,5 @@ model: models.fpgan.FPGAN
 model_hyperparams: configs/models/fpgan.yaml
 n_nodes: 1
 n_gpus: 4
-node_rank: 4
+node_rank: 1
 ccgan: False
