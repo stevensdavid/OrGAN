@@ -208,7 +208,7 @@ def train(gpu: int, args: Namespace, use_ddp: bool):
         wandb.watch(model.module)
 
     def embed(x):
-        return embedding(x) if args.ccgan else x
+        return embedding(x).detach() if args.ccgan else x
 
     for epoch in trange(args.epochs, desc="Epoch", disable=rank != 0):
         model.module.set_train()
