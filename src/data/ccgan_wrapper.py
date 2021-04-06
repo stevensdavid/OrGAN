@@ -29,7 +29,7 @@ class CcGANDatasetWrapper(AbstractDataset):
         for idx in range(len(self.dataset)):
             _, y = dataset[idx]
             self.labels[y.item()].append(idx)
-        self.unique_labels = np.asarray(list(self.labels.keys()))
+        self.unique_labels = np.asarray(sorted(self.labels.keys()))
         self.min_label = np.min(self.unique_labels)
         self.max_label = np.max(self.unique_labels)
         # Set according to rule of thumb from CCGAN paper appendix S.9
