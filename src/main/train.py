@@ -298,14 +298,14 @@ def train(gpu: int, args: Namespace, train_conf: TrainingConfig):
             for samples, _ in iter(val_data):
                 cuda_samples = samples.to(device, non_blocking=True)
                 for attempt in range(n_attempts):
-                    target_labels = dataset.random_targets(len(samples))
+                    target_labels = val_dataset.random_targets(len(samples))
                     cuda_labels = torch.unsqueeze(target_labels, 1).to(
                         device, non_blocking=True
                     )
                     generator_labels = embed(cuda_labels)
 
-                    dataset: HSVFashionMNIST  # TODO: break assumption
-                    ground_truth = dataset.ground_truths(samples, target_labels)
+                    val_dataset: HSVFashionMNIST  # TODO: break assumption
+                    ground_truth = val_dataset.ground_truths(samples, target_labels)
                     generated = model.module.generator.transform(
                         cuda_samples, generator_labels
                     )
@@ -317,7 +317,7 @@ def train(gpu: int, args: Namespace, train_conf: TrainingConfig):
         if use_ddp:
             # Sum across processes in distributed system
             dist.all_reduce(total_norm, op=dist.ReduceOp.SUM)
-        val_norm = total_norm / (len(dataset) * n_attempts)
+        val_norm = total_norm / (len(val_dataset) * n_attempts)
         # Log the last batch of images
         if rank == 0:
             generated_examples = generated[:10].cpu()
