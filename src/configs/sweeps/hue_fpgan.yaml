@@ -4,6 +4,7 @@ command:
   - python
   - "-m"
   - ${program}
+  - "--args_file"
   - "configs/sweeps/args/hue_fpgan_args.yaml"
 method: bayes
 early_terminate:
