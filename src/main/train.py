@@ -132,16 +132,19 @@ def train(gpu: int, args: Namespace, train_conf: TrainingConfig):
         torch.cuda.set_device(gpu)
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
-    dataset: AbstractDataset = build_from_yaml(args.data_config)
-    data_shape = dataset.data_shape()
+    train_dataset: AbstractDataset = build_from_yaml(args.data_config)
+    train_dataset.set_mode(DataSplit.TRAIN)
+    val_dataset: AbstractDataset = build_from_yaml(args.data_config)
+    val_dataset.set_mode(DataSplit.VAL)
+    data_shape = train_dataset.data_shape()
     if args.ccgan:
         vicinity_type = (
             VicinityType.HARD
             if args.ccgan_vicinity_type == "hard"
             else VicinityType.SOFT
         )
-        dataset = CcGANDatasetWrapper(
-            dataset,
+        train_dataset = CcGANDatasetWrapper(
+            train_dataset,
             type=vicinity_type,
             sigma=hyperparams["ccgan_sigma"],
             n_neighbours=hyperparams["ccgan_n_neighbours"],
@@ -161,17 +164,14 @@ def train(gpu: int, args: Namespace, train_conf: TrainingConfig):
         data_shape=data_shape, device=device, **hyperparams
     )
     if use_ddp:
-        dataset.set_mode(DataSplit.TRAIN)
         train_sampler = torch.utils.data.distributed.DistributedSampler(
-            dataset, num_replicas=args.world_size, rank=rank
+            train_dataset, num_replicas=args.world_size, rank=rank
         )
-        dataset.set_mode(DataSplit.VAL)
         val_sampler = torch.utils.data.distributed.DistributedSampler(
-            dataset, num_replicas=args.world_size, rank=rank
+            val_dataset, num_replicas=args.world_size, rank=rank
         )
-    dataset.set_mode(DataSplit.TRAIN)
     train_data = DataLoader(
-        dataset,
+        train_dataset,
         batch_size=args.batch_size,
         shuffle=False,
         num_workers=args.n_workers,
@@ -179,9 +179,8 @@ def train(gpu: int, args: Namespace, train_conf: TrainingConfig):
         sampler=train_sampler if use_ddp else None,
         worker_init_fn=seed_worker,
     )
-    dataset.set_mode(DataSplit.VAL)
     val_data = DataLoader(
-        dataset,
+        val_dataset,
         batch_size=args.batch_size,
         shuffle=False,
         num_workers=args.n_workers,
@@ -195,7 +194,7 @@ def train(gpu: int, args: Namespace, train_conf: TrainingConfig):
     log_frequency = train_conf.log_frequency * (
         1
         if train_conf.log_frequency_metric is FrequencyMetric.ITERATIONS
-        else len(dataset)
+        else len(train_data)
     )
     checkpoint_dir = path.join(args.checkpoint_dir, args.run_name)
     os.makedirs(checkpoint_dir, exist_ok=True)
@@ -211,7 +210,7 @@ def train(gpu: int, args: Namespace, train_conf: TrainingConfig):
     checkpoint_frequency = train_conf.checkpoint_frequency * (
         1
         if train_conf.checkpoint_frequency_metric is FrequencyMetric.ITERATIONS
-        else len(dataset)
+        else len(train_data)
     )
     model.to(device)
     if use_ddp:
@@ -230,7 +229,6 @@ def train(gpu: int, args: Namespace, train_conf: TrainingConfig):
 
     for epoch in trange(args.epochs, desc="Epoch", disable=rank != 0):
         model.module.set_train()
-        dataset.set_mode(DataSplit.TRAIN)
         for samples, labels in iter(train_data):
             if args.ccgan:
                 target_labels, labels, sample_weights = (
@@ -295,7 +293,6 @@ def train(gpu: int, args: Namespace, train_conf: TrainingConfig):
         # TODO: generalize this to other data sets
         total_norm = 0
         n_attempts = 5
-        dataset.set_mode(DataSplit.VAL)
         with torch.no_grad():
             for samples, _ in iter(val_data):
                 cuda_samples = samples.to(device, non_blocking=True)
