@@ -86,6 +86,17 @@ def train(gpu: int, args: Namespace, hyperparams: Optional[dict]):
         backend="nccl", init_method="env://", world_size=args.world_size, rank=rank
     )
 
+    if rank == 0:
+        wandb.init(
+            project="msc", name=args.run_name, config=hyperparams, id=args.run_name
+        )
+        hyperparams = {**hyperparams, **wandb.config}
+    else:
+        hyperparams = [None]
+    # share config between processes
+    dist.broadcast_object_list(hyperparams, src=0)
+    hyperparams = hyperparams[0]
+
     torch.cuda.set_device(gpu)
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
@@ -253,6 +264,9 @@ def train(gpu: int, args: Namespace, hyperparams: Optional[dict]):
                             torch.tensor(ground_truth, device=device) - generated, dim=0
                         )
                     )
+        # Sum across processes in distributed system
+        dist.all_reduce(total_norm, op=dist.ReduceOp.SUM)
+        val_norm = total_norm / (len(dataset) * n_attempts)
         # Log the last batch of images
         if rank == 0:
             generated_examples = generated[:10].cpu()
@@ -260,7 +274,6 @@ def train(gpu: int, args: Namespace, hyperparams: Optional[dict]):
                 samples[:10], generated_examples, ground_truth[:10], target_labels[:10]
             )
 
-            val_norm = total_norm / (len(dataset) * n_attempts)
             loss_logger.track_summary_metric("val_norm", val_norm)
 
     # Training finished
@@ -273,9 +286,7 @@ def main():
     args.world_size = args.n_gpus * args.n_nodes
     if args.run_name is None:
         args.run_name = generate_slug(3)
-    wandb.init(project="msc", name=args.run_name, config=hyperparams, id=args.run_name)
     set_seeds(seed=0)
-    hyperparams = wandb.config.as_dict()
     mp.spawn(train, nprocs=args.n_gpus, args=(args, hyperparams))
 
 
