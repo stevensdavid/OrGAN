@@ -77,7 +77,7 @@ def parse_args() -> Tuple[Namespace, dict]:
     return args, hyperparams
 
 
-def train(gpu: int, args: Namespace, hyperparams: Optional[dict]):
+def train(gpu: int, args: Namespace):
     rank = args.node_rank * args.n_gpus + gpu
     os.environ["MASTER_ADDR"] = "localhost"
     os.environ["MASTER_PORT"] = "12355"
@@ -95,10 +95,8 @@ def train(gpu: int, args: Namespace, hyperparams: Optional[dict]):
         timeout=timedelta(seconds=10),
     )
     if rank == 0:
-        wandb.init(
-            project="msc", name=args.run_name, config=hyperparams, id=args.run_name
-        )
-        hyperparams = {**hyperparams, **wandb.config}
+        wandb.init(project="msc", name=args.run_name, config=args, id=args.run_name)
+        hyperparams = {**vars(args), **wandb.config}
         datastore.set("hyperparams", json.dumps(hyperparams))
     dist.barrier()
     hyperparams = json.loads(datastore.get("hyperparams"))
@@ -291,18 +289,18 @@ def train(gpu: int, args: Namespace, hyperparams: Optional[dict]):
 
 def main():
     args, hyperparams = parse_args()
-    if args.hyperparams_file:
+    if args.args_file:
         # note order: explicit hyperparams take precedent
-        hyperparams = {**load_yaml(args.hyperparams_file), **hyperparams}
-    if not args.n_gpus:
-        args.n_gpus = hyperparams["n_gpus"]
-    if not args.n_nodes:
-        args.n_nodes = hyperparams["n_nodes"]
+        hyperparams = {**load_yaml(args.args_file), **hyperparams}
+    # merge file hyperparams, unknown flags and known into one namespace
+    cli_flags = vars(args)
+    vars(args).update({**hyperparams, **cli_flags})
+
     args.world_size = args.n_gpus * args.n_nodes
     if args.run_name is None:
         args.run_name = generate_slug(3)
     set_seeds(seed=0)
-    mp.spawn(train, nprocs=args.n_gpus, args=(args, hyperparams))
+    mp.spawn(train, nprocs=args.n_gpus, args=(args,))
 
 
 if __name__ == "__main__":
