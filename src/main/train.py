@@ -52,6 +52,9 @@ def parse_args() -> Tuple[Namespace, dict]:
     parser.add_argument("--experiment_name", type=str, default="")
     parser.add_argument("--batch_size", type=int)
     parser.add_argument("--run_name", type=str)
+    parser.add_argument(
+        "--n_workers", type=int, default=0, help="Data loading workers. Skipped if DDP."
+    )
     parser.add_argument("--ccgan", action="store_true")
     parser.add_argument("--ccgan_vicinity_type", type=str, choices=["hard", "soft"])
     parser.add_argument(
@@ -171,7 +174,7 @@ def train(gpu: int, args: Namespace, train_conf: TrainingConfig):
         dataset,
         batch_size=args.batch_size,
         shuffle=False,
-        num_workers=0,
+        num_workers=args.n_workers,
         pin_memory=True,
         sampler=train_sampler if use_ddp else None,
         worker_init_fn=seed_worker,
@@ -181,7 +184,7 @@ def train(gpu: int, args: Namespace, train_conf: TrainingConfig):
         dataset,
         batch_size=args.batch_size,
         shuffle=False,
-        num_workers=0,
+        num_workers=args.n_workers,
         pin_memory=True,
         sampler=val_sampler if use_ddp else None,
         worker_init_fn=seed_worker,
