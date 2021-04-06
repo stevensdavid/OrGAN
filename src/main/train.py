@@ -85,14 +85,14 @@ def train(gpu: int, args: Namespace, hyperparams: Optional[dict]):
     os.environ["MASTER_ADDR"] = "localhost"
     os.environ["MASTER_PORT"] = "12355"
     os.environ["STORE_ADDR"] = "localhost"
-    os.environ["STORE_PORT"] = 12344
+    os.environ["STORE_PORT"] = "12344"
     dist.init_process_group(
         backend="nccl", init_method="env://", world_size=args.world_size, rank=rank
     )
 
     datastore = dist.TCPStore(
         host_name=os.environ["STORE_ADDR"],
-        port=os.environ["STORE_PORT"],
+        port=int(os.environ["STORE_PORT"]),
         world_size=args.world_size,
         is_master=rank == 0,
         timeout=timedelta(seconds=10),
