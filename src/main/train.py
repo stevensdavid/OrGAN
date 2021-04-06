@@ -24,7 +24,7 @@ from torch.optim import Adam
 from torch.utils.data import DataLoader
 from tqdm import trange
 from util.dataclasses import TrainingConfig
-from util.enums import DataSplit, FrequencyMetric, VicinityType
+from util.enums import DataSplit, FrequencyMetric, MultiGPUType, VicinityType
 from util.logging import Logger
 from util.object_loader import build_from_yaml, load_yaml
 from util.pytorch_utils import seed_worker, set_seeds
@@ -94,7 +94,7 @@ def initialize_ddp(gpu: int, args: Namespace) -> int:
     return rank
 
 
-def get_ddp_datastore(rank: int, args: Namespace) -> dist.TCPStore:
+def get_ddp_datastore(rank: int, args: Namespace):
     datastore = dist.TCPStore(
         host_name=os.environ["STORE_ADDR"],
         port=int(os.environ["STORE_PORT"]),
@@ -111,7 +111,8 @@ def get_wandb_hyperparams(args: Namespace) -> dict:
     return hyperparams
 
 
-def train(gpu: int, args: Namespace, use_ddp: bool):
+def train(gpu: int, args: Namespace, train_conf: TrainingConfig):
+    use_ddp = train_conf.multi_gpu_type is MultiGPUType.DDP
     if use_ddp:
         rank = initialize_ddp()
         datastore = get_ddp_datastore(rank, args)
@@ -128,7 +129,6 @@ def train(gpu: int, args: Namespace, use_ddp: bool):
         torch.cuda.set_device(gpu)
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
-    train_conf = TrainingConfig.from_yaml(args.train_config)
     dataset: AbstractDataset = build_from_yaml(args.data_config)
     data_shape = dataset.data_shape()
     if args.ccgan:
@@ -226,12 +226,10 @@ def train(gpu: int, args: Namespace, use_ddp: bool):
             samples = samples.to(device, non_blocking=True)
             labels = labels.to(device, non_blocking=True)
             sample_weights = sample_weights.to(device, non_blocking=True)
-            discriminator_opt.zero_grad()
-            generator_opt.zero_grad()
-
             target_labels = target_labels.to(device, non_blocking=True)
-
             embedded_target_labels = embed(target_labels)
+
+            discriminator_opt.zero_grad()
             with autocast():
                 discriminator_loss = model.module.discriminator_loss(
                     samples, labels, embedded_target_labels, sample_weights,
@@ -241,6 +239,7 @@ def train(gpu: int, args: Namespace, use_ddp: bool):
             d_scaler.update()
 
             if step % d_updates_per_g_update == 0:
+                generator_opt.zero_grad()
                 embedded_labels = embed(labels)
                 # Update generator less often
                 with autocast():
@@ -325,11 +324,11 @@ def main():
     if args.run_name is None:
         args.run_name = generate_slug(3)
     set_seeds(seed=0)
-    use_ddp = args.multi_gpu_type == "ddp"
-    if use_ddp:
-        mp.spawn(train, nprocs=args.n_gpus, args=(args, use_ddp))
+    train_conf = TrainingConfig.from_yaml(args.train_config)
+    if train_conf.multi_gpu_type is MultiGPUType.DDP:
+        mp.spawn(train, nprocs=args.n_gpus, args=(args, train_conf))
     else:
-        train(gpu=-1, args=args, use_ddp=use_ddp)
+        train(gpu=-1, args=args, train_conf=train_conf)
 
 
 if __name__ == "__main__":

@@ -16,3 +16,7 @@ class VicinityType(Enum):
     HARD = auto()
     SOFT = auto()
 
+
+class MultiGPUType(Enum):
+    DDP = auto()
+    DATA_PARALLEL = auto()

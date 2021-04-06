@@ -6,7 +6,7 @@ from typing import Dict, Union
 
 from typing_extensions import Protocol
 
-from util.enums import FrequencyMetric
+from util.enums import FrequencyMetric, MultiGPUType
 from util.object_loader import load_yaml
 
 
@@ -51,6 +51,7 @@ class TrainingConfig:
     checkpoint_frequency_metric: FrequencyMetric
     log_frequency: int
     log_frequency_metric: FrequencyMetric
+    multi_gpu_type: MultiGPUType
 
     @staticmethod
     def from_yaml(filepath: str) -> TrainingConfig:
@@ -64,5 +65,10 @@ class TrainingConfig:
             FrequencyMetric.ITERATIONS
             if cfg["log_frequency_metric"] == "iterations"
             else FrequencyMetric.EPOCHS
+        )
+        cfg["multi_gpu_type"] = (
+            MultiGPUType.DDP
+            if cfg["multi_gpu_type"] == "ddp"
+            else MultiGPUType.DATA_PARALLEL
         )
         return TrainingConfig(**cfg)
