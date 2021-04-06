@@ -32,18 +32,17 @@ from util.pytorch_utils import seed_worker, set_seeds
 
 def parse_args() -> Tuple[Namespace, dict]:
     parser = ArgumentParser()
-    parser.add_argument("--epochs", type=int, help="Training duration", required=True)
+    parser.add_argument("--epochs", type=int, help="Training duration")
     parser.add_argument(
-        "--data_config", type=str, help="Path to dataset YAML config", required=True
+        "--data_config", type=str, help="Path to dataset YAML config",
     )
     parser.add_argument(
-        "--train_config", type=str, help="Path to training YAML config", required=True
+        "--train_config", type=str, help="Path to training YAML config",
     )
     parser.add_argument(
         "--checkpoint_dir",
         type=str,
         help="Directory to save and load checkpoints from",
-        required=True,
     )
     parser.add_argument("--n_nodes", type=int, default=1)
     parser.add_argument("--n_gpus", type=int, default=1)
@@ -51,16 +50,14 @@ def parse_args() -> Tuple[Namespace, dict]:
     parser.add_argument("--model", type=str, required=True)
     parser.add_argument("--resume_from", type=int)
     parser.add_argument("--experiment_name", type=str, default="", required=True)
-    parser.add_argument("--batch_size", type=int, required=True)
+    parser.add_argument("--batch_size", type=int)
     parser.add_argument("--run_name", type=str)
     parser.add_argument("--ccgan", action="store_true")
     parser.add_argument("--ccgan_vicinity_type", type=str, choices=["hard", "soft"])
     parser.add_argument(
         "--ccgan_embedding_file", type=str, help="CcGAN embedding module"
     )
-    parser.add_argument(
-        "--model_hyperparams", type=str, help="YAML file with hyperparams for model"
-    )
+    parser.add_argument("--args_file", type=str, help="YAML file with CLI args")
     parser.add_argument("--ccgan_embedding_dim", type=int)
     args, unknown = parser.parse_known_args()
     # map hyperparams like  ['--learning_rate', 0.5, ...] to paired dict items
@@ -135,12 +132,9 @@ def train(gpu: int, args: Namespace, hyperparams: Optional[dict]):
         data_shape.embedding_dim = args.ccgan_embedding_dim
     dataset.set_mode(DataSplit.TRAIN)
 
-    model_hyperparams = {}
-    if args.model_hyperparams:
-        model_hyperparams = load_yaml(args.model_hyperparams)
     model_class: Type = locate(args.model)
     model: AbstractI2I = model_class(
-        data_shape=data_shape, device=device, **{**hyperparams, **model_hyperparams}
+        data_shape=data_shape, device=device, **hyperparams
     )
     sampler = torch.utils.data.distributed.DistributedSampler(
         dataset, num_replicas=args.world_size, rank=rank
@@ -297,6 +291,13 @@ def train(gpu: int, args: Namespace, hyperparams: Optional[dict]):
 
 def main():
     args, hyperparams = parse_args()
+    if args.hyperparams_file:
+        # note order: explicit hyperparams take precedent
+        hyperparams = {**load_yaml(args.hyperparams_file), **hyperparams}
+    if not args.n_gpus:
+        args.n_gpus = hyperparams["n_gpus"]
+    if not args.n_nodes:
+        args.n_nodes = hyperparams["n_nodes"]
     args.world_size = args.n_gpus * args.n_nodes
     if args.run_name is None:
         args.run_name = generate_slug(3)
