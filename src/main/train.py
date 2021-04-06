@@ -114,7 +114,7 @@ def get_wandb_hyperparams(args: Namespace) -> dict:
 def train(gpu: int, args: Namespace, train_conf: TrainingConfig):
     use_ddp = train_conf.multi_gpu_type is MultiGPUType.DDP
     if use_ddp:
-        rank = initialize_ddp()
+        rank = initialize_ddp(gpu, args)
         datastore = get_ddp_datastore(rank, args)
         if rank == 0:
             hyperparams = get_wandb_hyperparams(args)
