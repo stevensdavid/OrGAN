@@ -152,23 +152,38 @@ def train(gpu: int, args: Namespace, train_conf: TrainingConfig):
         else:
             embedding = nn.DataParallel(embedding)
         data_shape.embedding_dim = args.ccgan_embedding_dim
-    dataset.set_mode(DataSplit.TRAIN)
 
     model_class: Type = locate(args.model)
     model: AbstractI2I = model_class(
         data_shape=data_shape, device=device, **hyperparams
     )
     if use_ddp:
-        sampler = torch.utils.data.distributed.DistributedSampler(
+        dataset.set_mode(DataSplit.TRAIN)
+        train_sampler = torch.utils.data.distributed.DistributedSampler(
             dataset, num_replicas=args.world_size, rank=rank
         )
-    data_loader = DataLoader(
+        dataset.set_mode(DataSplit.VAL)
+        val_sampler = torch.utils.data.distributed.DistributedSampler(
+            dataset, num_replicas=args.world_size, rank=rank
+        )
+    dataset.set_mode(DataSplit.TRAIN)
+    train_data = DataLoader(
         dataset,
         batch_size=args.batch_size,
         shuffle=False,
         num_workers=0,
         pin_memory=True,
-        sampler=sampler if use_ddp else None,
+        sampler=train_sampler if use_ddp else None,
+        worker_init_fn=seed_worker,
+    )
+    dataset.set_mode(DataSplit.VAL)
+    val_data = DataLoader(
+        dataset,
+        batch_size=args.batch_size,
+        shuffle=False,
+        num_workers=0,
+        pin_memory=True,
+        sampler=val_sampler if use_ddp else None,
         worker_init_fn=seed_worker,
     )
     discriminator_opt = Adam(model.discriminator_params())
@@ -213,7 +228,7 @@ def train(gpu: int, args: Namespace, train_conf: TrainingConfig):
     for epoch in trange(args.epochs, desc="Epoch", disable=rank != 0):
         model.module.set_train()
         dataset.set_mode(DataSplit.TRAIN)
-        for samples, labels in iter(data_loader):
+        for samples, labels in iter(train_data):
             if args.ccgan:
                 target_labels, labels, sample_weights = (
                     labels["target_labels"],
@@ -279,7 +294,7 @@ def train(gpu: int, args: Namespace, train_conf: TrainingConfig):
         n_attempts = 5
         dataset.set_mode(DataSplit.VAL)
         with torch.no_grad():
-            for samples, _ in iter(data_loader):
+            for samples, _ in iter(val_data):
                 cuda_samples = samples.to(device, non_blocking=True)
                 for attempt in range(n_attempts):
                     target_labels = dataset.random_targets(len(samples))
