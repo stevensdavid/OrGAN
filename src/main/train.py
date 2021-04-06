@@ -62,6 +62,7 @@ def parse_args() -> Tuple[Namespace, dict]:
     )
     parser.add_argument("--args_file", type=str, help="YAML file with CLI args")
     parser.add_argument("--ccgan_embedding_dim", type=int)
+    parser.add_argument("--multi_gpu_type", type=str, choices=["ddp", "dp"])
     args, unknown = parser.parse_known_args()
     hyperparams = {}
     if unknown:
@@ -81,7 +82,7 @@ def parse_args() -> Tuple[Namespace, dict]:
     return args
 
 
-def train(gpu: int, args: Namespace):
+def initialize_ddp(gpu: int, args: Namespace) -> int:
     rank = args.node_rank * args.n_gpus + gpu
     os.environ["MASTER_ADDR"] = "localhost"
     os.environ["MASTER_PORT"] = "12355"
@@ -90,7 +91,10 @@ def train(gpu: int, args: Namespace):
     dist.init_process_group(
         backend="nccl", init_method="env://", world_size=args.world_size, rank=rank
     )
+    return rank
 
+
+def get_ddp_datastore(rank: int, args: Namespace) -> dist.TCPStore:
     datastore = dist.TCPStore(
         host_name=os.environ["STORE_ADDR"],
         port=int(os.environ["STORE_PORT"]),
@@ -98,15 +102,30 @@ def train(gpu: int, args: Namespace):
         is_master=rank == 0,
         timeout=timedelta(seconds=10),
     )
-    if rank == 0:
-        wandb.init(project="msc", name=args.run_name, config=args, id=args.run_name)
-        hyperparams = {**vars(args), **wandb.config}
-        print(f"Config: {hyperparams}")
-        datastore.set("hyperparams", json.dumps(hyperparams))
-    dist.barrier()
-    hyperparams = json.loads(datastore.get("hyperparams"))
+    return datastore
 
-    torch.cuda.set_device(gpu)
+
+def get_wandb_hyperparams(args: Namespace) -> dict:
+    wandb.init(project="msc", name=args.run_name, config=args, id=args.run_name)
+    hyperparams = {**vars(args), **wandb.config}
+    return hyperparams
+
+
+def train(gpu: int, args: Namespace, use_ddp: bool):
+    if use_ddp:
+        rank = initialize_ddp()
+        datastore = get_ddp_datastore(rank, args)
+        if rank == 0:
+            hyperparams = get_wandb_hyperparams(args)
+            print(f"Config: {hyperparams}")
+            datastore.set("hyperparams", json.dumps(hyperparams))
+        dist.barrier()
+        hyperparams = json.loads(datastore.get("hyperparams"))
+    else:
+        hyperparams = get_wandb_hyperparams(args)
+        rank = 0
+    if use_ddp:
+        torch.cuda.set_device(gpu)
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
     train_conf = TrainingConfig.from_yaml(args.train_config)
@@ -128,6 +147,10 @@ def train(gpu: int, args: Namespace):
         embedding.load_state_dict(torch.load(args.ccgan_embedding_file)())
         embedding.to(device)
         embedding.eval()
+        if use_ddp:
+            embedding = nn.parallel.DistributedDataParallel(embedding, device_ids=[gpu])
+        else:
+            embedding = nn.DataParallel(embedding)
         data_shape.embedding_dim = args.ccgan_embedding_dim
     dataset.set_mode(DataSplit.TRAIN)
 
@@ -135,16 +158,17 @@ def train(gpu: int, args: Namespace):
     model: AbstractI2I = model_class(
         data_shape=data_shape, device=device, **hyperparams
     )
-    sampler = torch.utils.data.distributed.DistributedSampler(
-        dataset, num_replicas=args.world_size, rank=rank
-    )
+    if use_ddp:
+        sampler = torch.utils.data.distributed.DistributedSampler(
+            dataset, num_replicas=args.world_size, rank=rank
+        )
     data_loader = DataLoader(
         dataset,
         batch_size=args.batch_size,
         shuffle=False,
         num_workers=0,
         pin_memory=True,
-        sampler=sampler,
+        sampler=sampler if use_ddp else None,
         worker_init_fn=seed_worker,
     )
     discriminator_opt = Adam(model.discriminator_params())
@@ -172,19 +196,22 @@ def train(gpu: int, args: Namespace):
         else len(dataset)
     )
     model.to(device)
-    model.enable_ddp(device_ids=[gpu])
+    if use_ddp:
+        model = nn.parallel.DistributedDataParallel(model, device_ids=[gpu])
+    else:
+        model = nn.DataParallel(model)
     g_scaler = GradScaler()
     d_scaler = GradScaler()
     step = 0
     d_updates_per_g_update = 5
     if rank == 0:
-        wandb.watch(model)
+        wandb.watch(model.module)
 
     def embed(x):
         return embedding(x) if args.ccgan else x
 
     for epoch in trange(args.epochs, desc="Epoch", disable=rank != 0):
-        model.set_train()
+        model.module.set_train()
         dataset.set_mode(DataSplit.TRAIN)
         for samples, labels in iter(data_loader):
             if args.ccgan:
@@ -206,7 +233,7 @@ def train(gpu: int, args: Namespace):
 
             embedded_target_labels = embed(target_labels)
             with autocast():
-                discriminator_loss = model.discriminator_loss(
+                discriminator_loss = model.module.discriminator_loss(
                     samples, labels, embedded_target_labels, sample_weights,
                 )
             d_scaler.scale(discriminator_loss.total).backward()
@@ -217,7 +244,7 @@ def train(gpu: int, args: Namespace):
                 embedded_labels = embed(labels)
                 # Update generator less often
                 with autocast():
-                    generator_loss = model.generator_loss(
+                    generator_loss = model.module.generator_loss(
                         samples,
                         labels,
                         embedded_labels,
@@ -243,10 +270,11 @@ def train(gpu: int, args: Namespace):
                         f,
                     )
                 loss_logger.save(checkpoint_dir)
-                model.save_checkpoint(step, checkpoint_dir)
+                model.module.save_checkpoint(step, checkpoint_dir)
         # Validate
-        dist.barrier()
-        model.set_eval()
+        if use_ddp:
+            dist.barrier()
+        model.module.set_eval()
         # TODO: generalize this to other data sets
         total_norm = 0
         n_attempts = 5
@@ -263,7 +291,7 @@ def train(gpu: int, args: Namespace):
 
                     dataset: HSVFashionMNIST  # TODO: break assumption
                     ground_truth = dataset.ground_truths(samples, target_labels)
-                    generated = model.generator.module.transform(
+                    generated = model.module.generator.transform(
                         cuda_samples, generator_labels
                     )
                     total_norm += torch.sum(
@@ -271,8 +299,9 @@ def train(gpu: int, args: Namespace):
                             torch.tensor(ground_truth, device=device) - generated, dim=0
                         )
                     )
-        # Sum across processes in distributed system
-        dist.all_reduce(total_norm, op=dist.ReduceOp.SUM)
+        if use_ddp:
+            # Sum across processes in distributed system
+            dist.all_reduce(total_norm, op=dist.ReduceOp.SUM)
         val_norm = total_norm / (len(dataset) * n_attempts)
         # Log the last batch of images
         if rank == 0:
@@ -280,11 +309,9 @@ def train(gpu: int, args: Namespace):
             loss_logger.track_images(
                 samples[:10], generated_examples, ground_truth[:10], target_labels[:10]
             )
-
             loss_logger.track_summary_metric("val_norm", val_norm)
-
     # Training finished
-    model.save_checkpoint(step, checkpoint_dir)
+    model.module.save_checkpoint(step, checkpoint_dir)
     loss_logger.finish()
 
 
@@ -298,7 +325,11 @@ def main():
     if args.run_name is None:
         args.run_name = generate_slug(3)
     set_seeds(seed=0)
-    mp.spawn(train, nprocs=args.n_gpus, args=(args,))
+    use_ddp = args.multi_gpu_type == "ddp"
+    if use_ddp:
+        mp.spawn(train, nprocs=args.n_gpus, args=(args, use_ddp))
+    else:
+        train(gpu=-1, args=args, use_ddp=use_ddp)
 
 
 if __name__ == "__main__":

@@ -85,26 +85,18 @@ class FPGAN(nn.Module, AbstractI2I):
         self.mse = nn.MSELoss()
 
     def set_train(self):
-        self.generator.module.train()
-        self.discriminator.module.train()
+        self.generator.train()
+        self.discriminator.train()
 
     def set_eval(self):
-        self.generator.module.eval()
-        self.discriminator.module.eval()
+        self.generator.eval()
+        self.discriminator.eval()
 
     def discriminator_params(self) -> nn.parameter.Parameter:
         return self.discriminator.parameters()
 
     def generator_params(self) -> nn.parameter.Parameter:
         return self.generator.parameters()
-
-    def enable_ddp(self, device_ids):
-        self.generator = nn.parallel.DistributedDataParallel(
-            self.generator, device_ids=device_ids
-        )
-        self.discriminator = nn.parallel.DistributedDataParallel(
-            self.discriminator, device_ids=device_ids
-        )
 
     def discriminator_loss(
         self,
@@ -122,7 +114,7 @@ class FPGAN(nn.Module, AbstractI2I):
             sample_weights * self.square_error(labels, input_label)
         )
         # Discriminator losses with fake images
-        fake_image = self.generator.module.transform(input_image, embedded_target_label)
+        fake_image = self.generator.transform(input_image, embedded_target_label)
         sources, _ = self.discriminator(fake_image)
         classification_fake = torch.mean(sources)  # Should be 1 (fake) for all
         # Gradient penalty loss
@@ -166,13 +158,13 @@ class FPGAN(nn.Module, AbstractI2I):
         embedded_target_label: Tensor,
     ) -> GeneratorLoss:
         # Input to target
-        fake_image = self.generator.module.transform(input_image, embedded_target_label)
+        fake_image = self.generator.transform(input_image, embedded_target_label)
         sources, labels = self.discriminator(fake_image)
         g_loss_fake = -torch.mean(sources)
         g_loss_mse = self.hyperparams.l_mse * self.mse(labels, target_label)
 
         # Input to input
-        id_image = self.generator.module.transform(input_image, embedded_input_label)
+        id_image = self.generator.transform(input_image, embedded_input_label)
         sources, labels = self.discriminator(id_image)
         g_loss_fake_id = -torch.mean(sources)
         g_loss_mse_id = self.hyperparams.l_mse * self.mse(labels, input_label)
@@ -181,18 +173,14 @@ class FPGAN(nn.Module, AbstractI2I):
         )
 
         # Target to input
-        reconstructed_image = self.generator.module.transform(
-            fake_image, embedded_input_label
-        )
+        reconstructed_image = self.generator.transform(fake_image, embedded_input_label)
         g_loss_rec = self.hyperparams.l_rec * torch.mean(
             torch.abs(input_image - reconstructed_image)
         )
 
         # Input to input to input
         # TODO: Why do they do this?
-        reconstructed_id = self.generator.module.transform(
-            id_image, embedded_input_label
-        )
+        reconstructed_id = self.generator.transform(id_image, embedded_input_label)
         g_loss_rec_id = self.hyperparams.l_rec * torch.mean(
             torch.abs(input_image - reconstructed_id)
         )
