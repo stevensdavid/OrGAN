@@ -172,7 +172,7 @@ def train(gpu: int, args: Namespace):
         else len(dataset)
     )
     model.to(device)
-    model = nn.parallel.DistributedDataParallel(model, device_ids=[gpu])
+    model.enable_ddp(device_ids=[gpu])
     g_scaler = GradScaler()
     d_scaler = GradScaler()
     step = 0
@@ -184,7 +184,7 @@ def train(gpu: int, args: Namespace):
         return embedding(x) if args.ccgan else x
 
     for epoch in trange(args.epochs, desc="Epoch", disable=rank != 0):
-        model.module.set_train()
+        model.set_train()
         dataset.set_mode(DataSplit.TRAIN)
         for samples, labels in iter(data_loader):
             if args.ccgan:
@@ -206,7 +206,7 @@ def train(gpu: int, args: Namespace):
 
             embedded_target_labels = embed(target_labels)
             with autocast():
-                discriminator_loss = model.module.discriminator_loss(
+                discriminator_loss = model.discriminator_loss(
                     samples, labels, embedded_target_labels, sample_weights,
                 )
             d_scaler.scale(discriminator_loss.total).backward()
@@ -217,7 +217,7 @@ def train(gpu: int, args: Namespace):
                 embedded_labels = embed(labels)
                 # Update generator less often
                 with autocast():
-                    generator_loss = model.module.generator_loss(
+                    generator_loss = model.generator_loss(
                         samples,
                         labels,
                         embedded_labels,
@@ -243,10 +243,10 @@ def train(gpu: int, args: Namespace):
                         f,
                     )
                 loss_logger.save(checkpoint_dir)
-                model.module.save_checkpoint(step, checkpoint_dir)
+                model.save_checkpoint(step, checkpoint_dir)
         # Validate
         dist.barrier()
-        model.module.set_eval()
+        model.set_eval()
         # TODO: generalize this to other data sets
         total_norm = 0
         n_attempts = 5
@@ -263,7 +263,7 @@ def train(gpu: int, args: Namespace):
 
                     dataset: HSVFashionMNIST  # TODO: break assumption
                     ground_truth = dataset.ground_truths(samples, target_labels)
-                    generated = model.module.generator.transform(
+                    generated = model.generator.module.transform(
                         cuda_samples, generator_labels
                     )
                     total_norm += torch.sum(
@@ -284,7 +284,7 @@ def train(gpu: int, args: Namespace):
             loss_logger.track_summary_metric("val_norm", val_norm)
 
     # Training finished
-    model.module.save_checkpoint(step, checkpoint_dir)
+    model.save_checkpoint(step, checkpoint_dir)
     loss_logger.finish()
 
 
