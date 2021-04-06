@@ -299,8 +299,7 @@ def main():
     if args.model_hyperparams:
         hyperparams = {**load_yaml(args.model_hyperparams), **hyperparams}
     # merge file hyperparams, unknown flags and known into one namespace
-    cli_flags = vars(args)
-    vars(args).update({**hyperparams, **cli_flags})
+    vars(args).update(hyperparams)
 
     args.world_size = args.n_gpus * args.n_nodes
     if args.run_name is None:
