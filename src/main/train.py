@@ -178,8 +178,8 @@ def train(gpu: int, args: Namespace, hyperparams: Optional[dict]):
         if train_conf.checkpoint_frequency_metric is FrequencyMetric.ITERATIONS
         else len(dataset)
     )
-    model = nn.parallel.DistributedDataParallel(model, device_ids=[gpu])
     model.to(device)
+    model = nn.parallel.DistributedDataParallel(model, device_ids=[gpu])
     g_scaler = GradScaler()
     d_scaler = GradScaler()
     step = 0
