@@ -77,8 +77,8 @@ def parse_args() -> Tuple[Namespace, dict]:
             except ValueError:
                 pass
             hyperparams[k] = v
-
-    return args, hyperparams
+    vars(args).update(hyperparams)
+    return args
 
 
 def train(gpu: int, args: Namespace):
@@ -292,15 +292,11 @@ def train(gpu: int, args: Namespace):
 
 
 def main():
-    args, hyperparams = parse_args()
+    args = parse_args()
     if args.args_file:
-        # note order: explicit hyperparams take precedent
-        hyperparams = {**load_yaml(args.args_file), **hyperparams}
+        vars(args).update(load_yaml(args.args_file))
     if args.model_hyperparams:
-        hyperparams = {**load_yaml(args.model_hyperparams), **hyperparams}
-    # merge file hyperparams, unknown flags and known into one namespace
-    vars(args).update(hyperparams)
-
+        vars(args).update(load_yaml(args.model_hyperparams))
     args.world_size = args.n_gpus * args.n_nodes
     if args.run_name is None:
         args.run_name = generate_slug(3)
