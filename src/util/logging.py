@@ -65,7 +65,7 @@ class Logger:
         )
 
     def finish(self):
-        wandb.run.summary = {**wandb.run.summary, **self.summary}
+        # wandb.run.summary = {**wandb.run.summary, **self.summary} # TODO: buggy
         wandb.finish()
 
     def save(self, checkpoint_dir: str):
