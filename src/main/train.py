@@ -185,7 +185,7 @@ def train(gpu: int, args: Namespace):
     def embed(x):
         return embedding(x) if args.ccgan else x
 
-    for epoch in trange(args.epochs, desc="Epoch"):
+    for epoch in trange(args.epochs, desc="Epoch", disable=rank != 0):
         model.module.set_train()
         dataset.set_mode(DataSplit.TRAIN)
         for samples, labels in iter(data_loader):
