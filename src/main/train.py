@@ -97,14 +97,17 @@ def initialize_ddp(gpu: int, args: Namespace) -> int:
     return rank
 
 
-def get_ddp_datastore(rank: int, args: Namespace):
-    datastore = dist.TCPStore(
-        host_name=os.environ["STORE_ADDR"],
-        port=int(os.environ["STORE_PORT"]),
-        world_size=args.world_size,
-        is_master=rank == 0,
-        timeout=timedelta(seconds=10),
-    )
+def get_ddp_datastore(rank: int, args: Namespace, tcp: bool):
+    if tcp:
+        datastore = dist.TCPStore(
+            host_name=os.environ["STORE_ADDR"],
+            port=int(os.environ["STORE_PORT"]),
+            world_size=args.world_size,
+            is_master=rank == 0,
+            timeout=timedelta(seconds=10),
+        )
+    else:
+        datastore = dist.FileStore("/tmp/filestore", args.n_gpus)
     return datastore
 
 
@@ -117,7 +120,7 @@ def get_wandb_hyperparams(args: Namespace) -> dict:
 def train(gpu: int, args: Namespace, train_conf: TrainingConfig):
     use_ddp = train_conf.multi_gpu_type is MultiGPUType.DDP
     if use_ddp:
-        rank = initialize_ddp(gpu, args)
+        rank = initialize_ddp(gpu, args, tcp=False)
         datastore = get_ddp_datastore(rank, args)
         if rank == 0:
             hyperparams = get_wandb_hyperparams(args)
