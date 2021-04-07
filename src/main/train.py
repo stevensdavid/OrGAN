@@ -6,6 +6,7 @@ from os import path
 from pydoc import locate
 from typing import Optional, Tuple, Type
 
+import psutil
 import torch
 import torch.cuda
 import torch.distributed as dist
@@ -346,6 +347,15 @@ def main():
     set_seeds(seed=0)
     train_conf = TrainingConfig.from_yaml(args.train_config)
     if train_conf.multi_gpu_type is MultiGPUType.DDP:
+        # Kill other python processes. This is due to problems with zombie processes
+        my_pid = os.getpid()
+        zombie_processes = []
+        for process in psutil.process_iter():
+            attributes = process.as_dict(attrs=["pid", "name"])
+            if "python" in str(attributes["name"]) and attributes["pid"] != my_pid:
+                zombie_processes.append(process)
+                process.kill()
+        psutil.wait_procs(zombie_processes)
         mp.spawn(train, nprocs=args.n_gpus, args=(args, train_conf))
     else:
         train(gpu=-1, args=args, train_conf=train_conf)
