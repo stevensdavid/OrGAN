@@ -1,6 +1,7 @@
 """
 Fixed-Point GAN adapted from Siddiquee et al. (2019)
 """
+import os
 from dataclasses import dataclass
 
 import torch
@@ -206,9 +207,14 @@ class FPGAN(nn.Module, AbstractI2I):
             g_loss_rec_id,
         )
 
+    def _make_save_filename(self, iteration: int, checkpoint_dir: str) -> str:
+        return os.path.join(checkpoint_dir, f"fpgan_step_{iteration}.pt")
+
     def save_checkpoint(self, iteration: int, checkpoint_dir: str) -> None:
-        return super().save_checkpoint(iteration, checkpoint_dir)
+        torch.save({"G": self.generator.state_dict(), "D": self.discriminator.state_dict()}, self._make_save_filename(iteration, checkpoint_dir))
 
     def load_checkpoint(self, iteration: int, checkpoint_dir: str) -> None:
-        return super().load_checkpoint(iteration, checkpoint_dir)
+        checkpoint = torch.load(self._make_save_filename(iteration, checkpoint_dir))
+        self.generator.load_state_dict(checkpoint["G"])
+        self.discriminator.load_state_dict(checkpoint["D"])
 
