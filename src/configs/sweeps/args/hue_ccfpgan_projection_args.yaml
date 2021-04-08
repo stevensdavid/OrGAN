@@ -1,7 +1,7 @@
 epochs: 1000
 batch_size: 1024
 data_config: configs/datasets/hue_f_mnist.yaml
-checkpoint_dir: checkpoints
+checkpoint_dir: /storage/checkpoints
 experiment_name: HSV_CCFPGAN
 train_config: "configs/training.yaml"
 model: models.ccgan.CCFPGAN
