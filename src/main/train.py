@@ -297,6 +297,7 @@ def train(gpu: int, args: Namespace, train_conf: TrainingConfig):
         model.module.set_eval()
         # TODO: generalize this to other data sets
         total_norm = 0
+        total_mae = 0
         n_attempts = 5
         with torch.no_grad():
             for samples, _ in iter(val_data):
@@ -314,15 +315,19 @@ def train(gpu: int, args: Namespace, train_conf: TrainingConfig):
                         generated = model.module.generator.transform(
                             cuda_samples, generator_labels
                         )
+                    cuda_ground_truth = torch.tensor(ground_truth, device=device)
                     total_norm += torch.sum(
-                        torch.linalg.norm(
-                            torch.tensor(ground_truth, device=device) - generated, dim=0
-                        )
+                        torch.linalg.norm(cuda_ground_truth - generated, dim=0)
+                    )
+                    total_mae += torch.sum(
+                        torch.mean(torch.abs(cuda_ground_truth - generated), dim=0)
                     )
         if use_ddp:
             # Sum across processes in distributed system
             dist.all_reduce(total_norm, op=dist.ReduceOp.SUM)
+            dist.all_reduce(total_mae, op=dist.ReduceOp.SUM)
         val_norm = total_norm / (len(val_dataset) * n_attempts)
+        val_mae = total_mae / (len(val_dataset) * n_attempts)
         # Log the last batch of images
         if rank == 0:
             generated_examples = generated[:10].cpu()
@@ -330,6 +335,7 @@ def train(gpu: int, args: Namespace, train_conf: TrainingConfig):
                 samples[:10], generated_examples, ground_truth[:10], target_labels[:10]
             )
             loss_logger.track_summary_metric("val_norm", val_norm)
+            loss_logger.track_summary_metric("val_mae", val_mae)
     # Training finished
     model.module.save_checkpoint(step, checkpoint_dir)
     loss_logger.finish()
