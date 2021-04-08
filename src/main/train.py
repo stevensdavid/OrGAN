@@ -231,10 +231,12 @@ def train(gpu: int, args: Namespace, train_conf: TrainingConfig):
         wandb.watch(model.module)
 
     def embed_target(y):
-        return embedding(y).detach() if args.ccgan else y
+        with torch.no_grad():
+            return embedding(y).detach() if args.ccgan else y
 
     def embed_input(y):
-        return embedding(y).detach() if args.embed_discriminator else y
+        with torch.no_grad():
+            return embedding(y).detach() if args.embed_discriminator else y
 
     for epoch in trange(args.epochs, desc="Epoch", disable=rank != 0):
         model.module.set_train()
