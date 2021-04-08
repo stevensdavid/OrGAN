@@ -30,3 +30,12 @@ def seed_worker(worker_id):
     worker_seed = torch.initial_seed() % 2 ** 32
     np.random.seed(worker_seed)
     random.seed(worker_seed)
+
+
+def conv2d_output_size(
+    input_size: int, kernel_size: int, padding: int, stride: int
+) -> int:
+    output_size = 1 + (input_size - kernel_size + 2 * padding) / stride
+    assert output_size.is_integer()
+    return int(output_size)
+
