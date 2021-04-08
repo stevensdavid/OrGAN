@@ -1,6 +1,8 @@
+import os
 from abc import ABC, abstractmethod
 
-from torch import Tensor
+import torch
+from torch import Tensor, nn
 from torch.nn.parameter import Parameter
 from util.dataclasses import DataclassType, DataShape
 
@@ -8,8 +10,8 @@ from util.dataclasses import DataclassType, DataShape
 class AbstractI2I(ABC):
     @abstractmethod
     def __init__(self, data_shape: DataShape, **kwargs) -> None:
-        self.generator: AbstractI2I
-        ...
+        self.generator: AbstractGenerator
+        self.discriminator: AbstractDiscriminator
 
     @abstractmethod
     def discriminator_loss(
@@ -50,42 +52,36 @@ class AbstractI2I(ABC):
         """
         ...
 
-    @abstractmethod
-    def discriminator_params(self) -> Parameter:
-        """[summary]
+    def discriminator_params(self) -> torch.nn.parameter.Parameter:
+        return self.discriminator.parameters()
 
-        Returns:
-            Parameter: [description]
-        """
-        ...
+    def generator_params(self) -> torch.nn.parameter.Parameter:
+        return self.generator.parameters()
 
-    @abstractmethod
-    def generator_params(self) -> Parameter:
-        """[summary]
+    def _make_save_filename(self, iteration: int, checkpoint_dir: str) -> str:
+        return os.path.join(checkpoint_dir, f"step_{iteration}.pt")
 
-        Returns:
-            Parameter: [description]
-        """
-        ...
-
-    @abstractmethod
     def save_checkpoint(self, iteration: int, checkpoint_dir: str) -> None:
-        ...
+        torch.save(
+            {"G": self.generator.state_dict(), "D": self.discriminator.state_dict()},
+            self._make_save_filename(iteration, checkpoint_dir),
+        )
 
-    @abstractmethod
     def load_checkpoint(self, iteration: int, checkpoint_dir: str) -> None:
-        ...
+        checkpoint = torch.load(self._make_save_filename(iteration, checkpoint_dir))
+        self.generator.load_state_dict(checkpoint["G"])
+        self.discriminator.load_state_dict(checkpoint["D"])
 
-    @abstractmethod
-    def set_train(self) -> None:
-        ...
+    def set_train(self):
+        self.generator.train()
+        self.discriminator.train()
 
-    @abstractmethod
-    def set_eval(self) -> None:
-        ...
+    def set_eval(self):
+        self.generator.eval()
+        self.discriminator.eval()
 
 
-class AbstractGenerator(ABC):
+class AbstractGenerator(ABC, nn.Module):
     @abstractmethod
     def transform(self, x: Tensor, y: Tensor) -> Tensor:
         """Transform data to the target label
@@ -98,3 +94,7 @@ class AbstractGenerator(ABC):
             Tensor: [description]
         """
         ...
+
+
+class AbstractDiscriminator(ABC, nn.Module):
+    ...

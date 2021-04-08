@@ -5,10 +5,10 @@ from torch import Tensor, nn
 from util.dataclasses import DataShape
 from util.pytorch_utils import ConditionalInstanceNorm2d
 
-from models.abstract_model import AbstractGenerator
+from models.abstract_model import AbstractDiscriminator, AbstractGenerator
 
 
-class Generator(nn.Module, AbstractGenerator):
+class Generator(AbstractGenerator):
     def __init__(
         self,
         data_shape: DataShape,
@@ -106,7 +106,7 @@ class Generator(nn.Module, AbstractGenerator):
         return x_fake
 
 
-class Discriminator(nn.Module):
+class Discriminator(AbstractDiscriminator):
     def __init__(self, data_shape: DataShape, conv_dim: int, num_scales: int):
         super().__init__()
         layers = [

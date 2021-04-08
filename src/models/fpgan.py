@@ -1,7 +1,6 @@
 """
 Fixed-Point GAN adapted from Siddiquee et al. (2019)
 """
-import os
 from dataclasses import dataclass
 
 import torch
@@ -84,20 +83,6 @@ class FPGAN(nn.Module, AbstractI2I):
         )
         self.square_error = nn.MSELoss(reduction="none")
         self.mse = nn.MSELoss()
-
-    def set_train(self):
-        self.generator.train()
-        self.discriminator.train()
-
-    def set_eval(self):
-        self.generator.eval()
-        self.discriminator.eval()
-
-    def discriminator_params(self) -> nn.parameter.Parameter:
-        return self.discriminator.parameters()
-
-    def generator_params(self) -> nn.parameter.Parameter:
-        return self.generator.parameters()
 
     def discriminator_loss(
         self,
@@ -206,15 +191,4 @@ class FPGAN(nn.Module, AbstractI2I):
             g_loss_rec,
             g_loss_rec_id,
         )
-
-    def _make_save_filename(self, iteration: int, checkpoint_dir: str) -> str:
-        return os.path.join(checkpoint_dir, f"fpgan_step_{iteration}.pt")
-
-    def save_checkpoint(self, iteration: int, checkpoint_dir: str) -> None:
-        torch.save({"G": self.generator.state_dict(), "D": self.discriminator.state_dict()}, self._make_save_filename(iteration, checkpoint_dir))
-
-    def load_checkpoint(self, iteration: int, checkpoint_dir: str) -> None:
-        checkpoint = torch.load(self._make_save_filename(iteration, checkpoint_dir))
-        self.generator.load_state_dict(checkpoint["G"])
-        self.discriminator.load_state_dict(checkpoint["D"])
 
