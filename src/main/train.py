@@ -61,6 +61,7 @@ def parse_args() -> Tuple[Namespace, dict]:
     parser.add_argument(
         "--ccgan_embedding_file", type=str, help="CcGAN embedding module"
     )
+    parser.add_argument("--embed_discriminator", action="store_true")
     parser.add_argument(
         "--model_hyperparams", type=str, help="YAML file with model kwargs"
     )
@@ -229,8 +230,11 @@ def train(gpu: int, args: Namespace, train_conf: TrainingConfig):
     if rank == 0:
         wandb.watch(model.module)
 
-    def embed(x):
-        return embedding(x).detach() if args.ccgan else x
+    def embed_target(y):
+        return embedding(y).detach() if args.ccgan else y
+
+    def embed_input(y):
+        return embedding(y).detach() if args.embed_discriminator else y
 
     for epoch in trange(args.epochs, desc="Epoch", disable=rank != 0):
         model.module.set_train()
@@ -248,7 +252,8 @@ def train(gpu: int, args: Namespace, train_conf: TrainingConfig):
             labels = labels.to(device, non_blocking=True)
             sample_weights = sample_weights.to(device, non_blocking=True)
             target_labels = target_labels.to(device, non_blocking=True)
-            embedded_target_labels = embed(target_labels)
+            embedded_target_labels = embed_target(target_labels)
+            labels = embed_input(labels)
 
             discriminator_opt.zero_grad()
             with autocast():
@@ -261,7 +266,11 @@ def train(gpu: int, args: Namespace, train_conf: TrainingConfig):
 
             if step % d_updates_per_g_update == 0:
                 generator_opt.zero_grad()
-                embedded_labels = embed(labels)
+                if args.embed_discriminator:
+                    embedded_labels = labels
+                else:
+                    embedded_labels = embed_target(labels)
+
                 # Update generator less often
                 with autocast():
                     generator_loss = model.module.generator_loss(
@@ -307,7 +316,7 @@ def train(gpu: int, args: Namespace, train_conf: TrainingConfig):
                     cuda_labels = torch.unsqueeze(target_labels, 1).to(
                         device, non_blocking=True
                     )
-                    generator_labels = embed(cuda_labels)
+                    generator_labels = embed_target(cuda_labels)
 
                     val_dataset: HSVFashionMNIST  # TODO: break assumption
                     ground_truth = val_dataset.ground_truths(samples, target_labels)

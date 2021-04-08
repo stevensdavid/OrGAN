@@ -2,17 +2,36 @@
 Fixed-Point GAN adapted from Siddiquee et al. (2019) with additions from Ding et al.
 (2020)
 """
-from typing import Tuple
+from dataclasses import dataclass
+from typing import Optional, Tuple, Union
 
 import torch
 from torch import Tensor, nn
 from torch.cuda.amp import autocast
 from torchvision.models import resnet18
-from util.dataclasses import DataShape
+from util.dataclasses import DataclassExtensions, DataShape
 from util.pytorch_utils import ConditionalInstanceNorm2d, conv2d_output_size
 
 from models import patchgan
-from models.fpgan import FPGAN
+from models.fpgan import FPGAN, DiscriminatorLoss, GeneratorLoss
+
+
+@dataclass
+class CCDiscriminatorLoss(DataclassExtensions):
+    total: Tensor
+    classification_real: Tensor
+    classification_fake: Tensor
+    gradient_penalty: Tensor
+
+
+@dataclass
+class CCGeneratorLoss(DataclassExtensions):
+    total: Tensor
+    classification_fake: Tensor
+    classification_id: Tensor
+    id_loss: Tensor
+    reconstruction: Tensor
+    id_reconstruction: Tensor
 
 
 class LabelEmbedding(nn.Module):
@@ -97,8 +116,8 @@ class CCDiscriminator(nn.Module):
             ),
             nn.LeakyReLU(0.01),
         ]
-        image_side = conv2d_output_size(
-            data_shape.x_size, kernel_size=4, stride=2, padidng=1
+        current_image_side = conv2d_output_size(
+            data_shape.x_size, kernel_size=4, stride=2, padding=1
         )
         current_dim = conv_dim
         for _ in range(1, num_scales):
@@ -108,31 +127,29 @@ class CCDiscriminator(nn.Module):
                 ),
                 nn.LeakyReLU(0.01),
             ]
-            image_side = conv2d_output_size(
-                image_side, kernel_size=4, stride=2, padidng=1
+            current_image_side = conv2d_output_size(
+                current_image_side, kernel_size=4, stride=2, padding=1
             )
             current_dim *= 2
 
-        layers.append(
-            nn.Conv2d(current_dim, 1, kernel_size=3, stride=1, padding=1, bias=False)
-        )
         self.x_input = nn.Sequential(*layers)
-        n_patches = (
-            conv2d_output_size(data_shape.x_size, kernel_size=3, stride=1, padidng=1)
-            ** 2
-        )
-        self.x_output = nn.utils.spectral_norm(nn.Linear(current_dim, 1, bias=True))
         self.y_input = nn.utils.spectral_norm(
-            nn.Linear(data_shape.embedding_dim, current_dim * n_patches, bias=False)
+            nn.Linear(
+                data_shape.embedding_dim,
+                current_dim * (current_image_side ** 2),
+                bias=False,
+            )
+        )
+        self.x_output = nn.utils.spectral_norm(
+            nn.Conv2d(current_dim, 1, kernel_size=3, stride=1, padding=1, bias=False)
         )
         self.sigmoid = nn.Sigmoid()
 
     def forward(self, x: Tensor, y: Tensor) -> Tensor:
-        h_x = self.x_input(x)  # Shape: batch x 1 x sqrt(n_patches) x sqrt(n_patches)
-        h_y = self.y_input(y)  # Shape: batch x n_patches
-        h_x = torch.flatten(h_x, start_dim=1)  # Shape: batch x n_patches
-        y_output = h_x * h_y  # Shape: batch x n_patches
-        h = self.x_output(h_x) + y_output
+        h_x = self.x_input(x)
+        h_y = self.y_input(y)
+        y_output = torch.sum(h_y * torch.flatten(h_x, start_dim=1), dim=1)
+        h = self.x_output(h_x) + y_output.view(-1, 1, 1, 1)
         image_source = self.sigmoid(h)
         return image_source
 
@@ -146,11 +163,11 @@ class CCFPGAN(FPGAN):
         g_num_bottleneck: int,
         d_conv_dim: int,
         d_num_scales: int,
-        l_mse: float,
         l_rec: float,
         l_id: float,
         l_grad_penalty: float,
-        ccgan_discriminator: bool=False,
+        l_mse: Optional[float] = None,  # Only needed if not ccgan_discriminator
+        embed_discriminator: bool = False,
         **kwargs
     ):
         super().__init__(
@@ -167,6 +184,108 @@ class CCFPGAN(FPGAN):
             **kwargs
         )
         self.generator = CCGenerator(data_shape, g_conv_dim, g_num_bottleneck)
-        if ccgan_discriminator:
+        self.ccgan_discriminator = embed_discriminator
+        if self.ccgan_discriminator:
             self.discriminator = CCDiscriminator(data_shape, d_conv_dim, d_num_scales)
+        elif l_mse is None:
+            raise TypeError("Missing mandatory hyperparameter for PatchGAN disc: l_mse")
+
+    def discriminator_loss(
+        self,
+        input_image: Tensor,
+        input_label: Tensor,
+        embedded_target_label: Tensor,
+        sample_weights: Tensor,
+    ) -> Union[CCDiscriminatorLoss, DiscriminatorLoss]:
+        if not self.ccgan_discriminator:
+            return super().discriminator_loss(
+                input_image, input_label, embedded_target_label, sample_weights
+            )
+        # CCDiscriminator doesn't output class, so we don't need label losses
+
+        sample_weights = sample_weights.view(-1, 1, 1, 1)
+        # Discriminator losses with real images
+        sources = self.discriminator(input_image, input_label)
+        classification_real = -torch.mean(sources)  # Should be 0 (real) for all
+        # Discriminator losses with fake images
+        fake_image = self.generator.transform(input_image, embedded_target_label)
+        sources = self.discriminator(fake_image, embedded_target_label)
+        classification_fake = torch.mean(sources)  # Should be 1 (fake) for all
+        # Gradient penalty loss
+        alpha = torch.rand(input_image.size(0), 1, 1, 1).to(self.device)
+        # Blend real and fake image randomly
+        x_hat = (
+            alpha * input_image.data + (1 - alpha) * fake_image.data
+        ).requires_grad_(True)
+        alpha = alpha.view(-1, 1)
+        y_hat = (
+            alpha * input_label + (1 - alpha) * embedded_target_label
+        ).requires_grad_(True)
+        grad_sources = self.discriminator(x_hat, y_hat)
+        weight = torch.ones(grad_sources.size(), device=self.device)
+        gradient = torch.autograd.grad(
+            outputs=grad_sources,
+            inputs=[x_hat, y_hat],
+            grad_outputs=weight,
+            retain_graph=True,
+            create_graph=True,
+            only_inputs=True,
+        )[0]
+        gradient = gradient.view(gradient.size(0), -1)
+        gradient_norm = torch.sqrt(torch.sum(gradient ** 2, dim=1))
+        gradient_penalty = torch.mean((gradient_norm - 1) ** 2)
+        gradient_penalty *= self.hyperparams.l_grad_penalty
+
+        total = classification_real + classification_fake + gradient_penalty
+        return CCDiscriminatorLoss(
+            total, classification_real, classification_fake, gradient_penalty,
+        )
+
+    def generator_loss(
+        self,
+        input_image: Tensor,
+        input_label: Tensor,
+        embedded_input_label: Tensor,
+        target_label: Tensor,
+        embedded_target_label: Tensor,
+    ) -> Union[CCGeneratorLoss, GeneratorLoss]:
+        if not self.ccgan_discriminator:
+            return super().generator_loss(
+                input_image,
+                input_label,
+                embedded_input_label,
+                target_label,
+                embedded_target_label,
+            )
+        # CCDiscriminator doesn't output class, so we don't need label losses
+        # Input to target
+        fake_image = self.generator.transform(input_image, embedded_target_label)
+        sources = self.discriminator(fake_image, embedded_target_label)
+        g_loss_fake = -torch.mean(sources)
+
+        # Input to input
+        id_image = self.generator.transform(input_image, embedded_input_label)
+        sources = self.discriminator(id_image, embedded_input_label)
+        g_loss_fake_id = -torch.mean(sources)
+        g_loss_id = self.hyperparams.l_id * torch.mean(
+            torch.abs(input_image - id_image)
+        )
+
+        # Target to input
+        reconstructed_image = self.generator.transform(fake_image, embedded_input_label)
+        g_loss_rec = self.hyperparams.l_rec * torch.mean(
+            torch.abs(input_image - reconstructed_image)
+        )
+
+        # Input to input to input
+        reconstructed_id = self.generator.transform(id_image, embedded_input_label)
+        g_loss_rec_id = self.hyperparams.l_rec * torch.mean(
+            torch.abs(input_image - reconstructed_id)
+        )
+
+        total = g_loss_fake + g_loss_fake_id + g_loss_id + g_loss_rec + g_loss_rec_id
+
+        return CCGeneratorLoss(
+            total, g_loss_fake, g_loss_fake_id, g_loss_id, g_loss_rec, g_loss_rec_id,
+        )
 

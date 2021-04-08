@@ -1,4 +1,4 @@
-epochs: 300
+epochs: 1000
 batch_size: 1024
 data_config: configs/datasets/hue_f_mnist.yaml
 checkpoint_dir: checkpoints
@@ -14,4 +14,4 @@ ccgan: True
 ccgan_vicinity_type: hard
 ccgan_embedding_file: checkpoints/embeddings/hsv_fmnist/embedding.pt
 ccgan_embedding_dim: 128
-ccgan_discriminator: True
+embed_discriminator: True
