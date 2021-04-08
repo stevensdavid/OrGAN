@@ -12,6 +12,6 @@ n_workers: 20
 node_rank: 0
 ccgan: True
 ccgan_vicinity_type: hard
-ccgan_embedding_file: checkpoints/embeddings/hsv_fmnist/embedding.pt
+ccgan_embedding_file: /storage/checkpoints/embeddings/hsv_fmnist/embedding.pt
 ccgan_embedding_dim: 128
 embed_discriminator: True
