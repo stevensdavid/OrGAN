@@ -56,7 +56,7 @@ class CcGANDatasetWrapper(AbstractDataset):
             candidate_labels = self.unique_labels[
                 np.exp(
                     -self.hyperparam * (self.unique_labels - noisy_label) ** 2
-                    > self.EPS
+                    > self.eps
                 )
             ]
         candidate_idxs = [
