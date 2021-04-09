@@ -213,6 +213,7 @@ class CCFPGAN(FPGAN):
         # Discriminator losses with fake images
         fake_image = self.generator.transform(input_image, embedded_target_label)
         sources = self.discriminator(fake_image, embedded_target_label)
+        target_weights = sample_weights.view(-1, 1, 1, 1)
         classification_fake = torch.mean(
             target_weights * sources
         )  # Should be 1 (fake) for all
@@ -253,7 +254,7 @@ class CCFPGAN(FPGAN):
         embedded_input_label: Tensor,
         target_label: Tensor,
         embedded_target_label: Tensor,
-        label_weights: Tensor,
+        sample_weights: Tensor,
     ) -> Union[CCGeneratorLoss, GeneratorLoss]:
         if not self.ccgan_discriminator:
             return super().generator_loss(
@@ -273,20 +274,21 @@ class CCFPGAN(FPGAN):
         id_image = self.generator.transform(input_image, embedded_input_label)
         sources = self.discriminator(id_image, embedded_input_label)
         g_loss_fake_id = -torch.mean(sources)
+        sample_weights = sample_weights.view(-1, 1, 1, 1)
         g_loss_id = self.hyperparams.l_id * torch.mean(
-            torch.abs(input_image - id_image)
+            sample_weights * torch.abs(input_image - id_image)
         )
 
         # Target to input
         reconstructed_image = self.generator.transform(fake_image, embedded_input_label)
         g_loss_rec = self.hyperparams.l_rec * torch.mean(
-            torch.abs(input_image - reconstructed_image)
+            sample_weights * torch.abs(input_image - reconstructed_image)
         )
 
         # Input to input to input
         reconstructed_id = self.generator.transform(id_image, embedded_input_label)
         g_loss_rec_id = self.hyperparams.l_rec * torch.mean(
-            torch.abs(input_image - reconstructed_id)
+            sample_weights * torch.abs(input_image - reconstructed_id)
         )
 
         total = g_loss_fake + g_loss_fake_id + g_loss_id + g_loss_rec + g_loss_rec_id
