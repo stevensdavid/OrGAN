@@ -64,6 +64,7 @@ class CcGANDatasetWrapper(AbstractDataset):
         ]
         image_idx = np.random.choice(candidate_idxs)
         image, label = self.dataset[image_idx]
+        label = label.item()
         if self.type is VicinityType.HARD:
             weight = 1
             target_label = np.random.uniform(
@@ -76,8 +77,6 @@ class CcGANDatasetWrapper(AbstractDataset):
                 noisy_label - self.soft_offset, noisy_label + self.soft_offset
             )
             target_weight = self.svdl_distance(noisy_label, target_label)
-
-        target_weight
         if self.clip:
             target_label = np.clip(target_label, self.min_label, self.max_label)
         return (
