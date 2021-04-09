@@ -196,6 +196,7 @@ class CCFPGAN(FPGAN):
         input_label: Tensor,
         embedded_target_label: Tensor,
         sample_weights: Tensor,
+        target_weights: Tensor,
     ) -> Union[CCDiscriminatorLoss, DiscriminatorLoss]:
         if not self.ccgan_discriminator:
             return super().discriminator_loss(
@@ -206,11 +207,15 @@ class CCFPGAN(FPGAN):
         sample_weights = sample_weights.view(-1, 1, 1, 1)
         # Discriminator losses with real images
         sources = self.discriminator(input_image, input_label)
-        classification_real = -torch.mean(sources)  # Should be 0 (real) for all
+        classification_real = -torch.mean(
+            sample_weights * sources
+        )  # Should be 0 (real) for all
         # Discriminator losses with fake images
         fake_image = self.generator.transform(input_image, embedded_target_label)
         sources = self.discriminator(fake_image, embedded_target_label)
-        classification_fake = torch.mean(sources)  # Should be 1 (fake) for all
+        classification_fake = torch.mean(
+            target_weights * sources
+        )  # Should be 1 (fake) for all
         # Gradient penalty loss
         alpha = torch.rand(input_image.size(0), 1, 1, 1).to(self.device)
         # Blend real and fake image randomly
@@ -248,6 +253,7 @@ class CCFPGAN(FPGAN):
         embedded_input_label: Tensor,
         target_label: Tensor,
         embedded_target_label: Tensor,
+        label_weights: Tensor,
     ) -> Union[CCGeneratorLoss, GeneratorLoss]:
         if not self.ccgan_discriminator:
             return super().generator_loss(

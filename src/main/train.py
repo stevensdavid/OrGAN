@@ -242,13 +242,15 @@ def train(gpu: int, args: Namespace, train_conf: TrainingConfig):
         model.module.set_train()
         for samples, labels in iter(train_data):
             if args.ccgan:
-                target_labels, labels, sample_weights = (
+                target_labels, labels, sample_weights, target_weights = (
                     labels["target_labels"],
                     labels["labels"],
                     labels["label_weights"],
+                    labels["target_weights"],
                 )
             else:
                 sample_weights = torch.ones(args.batch_size)
+                target_weights = torch.ones(args.batch_size)
                 target_labels = train_dataset.random_targets(labels.shape)
             samples = samples.to(device, non_blocking=True)
             labels = labels.to(device, non_blocking=True)
@@ -260,13 +262,20 @@ def train(gpu: int, args: Namespace, train_conf: TrainingConfig):
             discriminator_opt.zero_grad()
             with autocast():
                 discriminator_loss = model.module.discriminator_loss(
-                    samples, labels, embedded_target_labels, sample_weights,
+                    samples,
+                    labels,
+                    embedded_target_labels,
+                    sample_weights,
+                    target_weights,
                 )
             d_scaler.scale(discriminator_loss.total).backward()
             d_scaler.step(discriminator_opt)
             d_scaler.update()
 
             if step % d_updates_per_g_update == 0:
+                target_labels = train_dataset.random_targets(labels.shape)
+                target_labels = target_labels.to(device, non_blocking=True)
+                target_labels = embed_target(target_labels)
                 generator_opt.zero_grad()
                 if args.embed_discriminator:
                     embedded_labels = labels
