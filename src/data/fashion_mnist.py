@@ -21,6 +21,7 @@ class HSVFashionMNIST(FashionMNIST, AbstractDataset):
         target_transform: Optional[Callable] = None,
         download: bool = False,
         simplified: bool = False,
+        n_clusters: int = 10,
     ) -> None:
         super().__init__(
             root,
@@ -39,11 +40,13 @@ class HSVFashionMNIST(FashionMNIST, AbstractDataset):
             self.len_val = total_samples - self.len_train
         # Generate random labels *once*
         np.random.seed(0)
-        ys = np.linspace(0, 1, num=10, endpoint=False)
+        ys = np.linspace(0, 1, num=n_clusters, endpoint=False)
         ys = np.repeat(ys, total_samples // len(ys))
         np.random.shuffle(ys)
         self.ys = ys
-        self.hues = (ys + np.random.normal(size=ys.shape, scale=1 / 100)) % 1
+        self.hues = (
+            ys + np.random.normal(size=ys.shape, scale=1 / (n_clusters * 10))
+        ) % 1
         self.pad = nn.ZeroPad2d(2)
 
     def _getitem(self, index):
