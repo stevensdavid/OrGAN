@@ -42,6 +42,9 @@ class CcGANDatasetWrapper(AbstractDataset):
         self.eps = 10e-3
         self.soft_offset = np.sqrt(-(np.log(self.eps) / self.hyperparam))
 
+    def svdl_distance(self, label, noisy_label) -> float:
+        return np.exp(-self.hyperparam * (label - noisy_label) ** 2)
+
     def _getitem(self, _: int) -> Tuple[Tensor, Tensor]:
         sample_label = np.random.choice(self.unique_labels)
         noisy_label = sample_label + np.random.normal(scale=self.sigma)
@@ -54,10 +57,7 @@ class CcGANDatasetWrapper(AbstractDataset):
             ]
         elif self.type is VicinityType.SOFT:
             candidate_labels = self.unique_labels[
-                np.exp(
-                    -self.hyperparam * (self.unique_labels - noisy_label) ** 2
-                    > self.eps
-                )
+                self.svdl_distance(self.unique_labels, noisy_label) > self.eps
             ]
         candidate_idxs = [
             idx for label in candidate_labels for idx in self.labels[label]
@@ -71,11 +71,11 @@ class CcGANDatasetWrapper(AbstractDataset):
             )
             target_weight = 1
         elif self.type is VicinityType.SOFT:
-            weight = np.exp(-self.hyperparam * (label - noisy_label) ** 2)
+            weight = self.svdl_distance(label, noisy_label)
             target_label = np.random.uniform(
                 noisy_label - self.soft_offset, noisy_label + self.soft_offset
             )
-            target_weight = np.exp(-self.hyperparam * (noisy_label - target_label) ** 2)
+            target_weight = self.svdl_distance(noisy_label, target_label)
 
         target_weight
         if self.clip:
