@@ -290,6 +290,7 @@ def train(gpu: int, args: Namespace, train_conf: TrainingConfig):
                         embedded_labels,
                         target_labels,
                         embedded_target_labels,
+                        sample_weights,
                     )
                 g_scaler.scale(generator_loss.total).backward()
                 g_scaler.step(generator_opt)
