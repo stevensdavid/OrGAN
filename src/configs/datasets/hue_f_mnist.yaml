@@ -3,3 +3,4 @@ kwargs:
   root: /storage/data/FashionMNIST
   train: true
   download: true
+  n_clusters: 20
