@@ -257,6 +257,7 @@ def train(gpu: int, args: Namespace, train_conf: TrainingConfig):
                 sample_weights = torch.ones(args.batch_size)
                 target_weights = torch.ones(args.batch_size)
                 target_labels = train_dataset.random_targets(labels.shape)
+            raw_labels = labels
             if args.cyclical:
                 labels = to_cyclical(labels)
                 target_labels = to_cyclical(target_labels)
@@ -281,12 +282,12 @@ def train(gpu: int, args: Namespace, train_conf: TrainingConfig):
             d_scaler.update()
 
             if step % d_updates_per_g_update == 0:
-                target_labels = train_dataset.random_targets(labels.shape)
+                target_labels = train_dataset.random_targets(raw_labels.shape)
                 if args.cyclical:
                     target_labels = to_cyclical(target_labels)
                 target_labels = target_labels.to(device, non_blocking=True)
                 target_labels = embed_input(target_labels)
-                embedded_labels = embed_input(labels)
+                embedded_labels = embed_target(labels)
                 generator_opt.zero_grad()
                 # Update generator less often
                 with autocast():
