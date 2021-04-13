@@ -178,7 +178,7 @@ def train_or_load_embedding(
 ) -> LabelEmbedding:
     dataset: AbstractDataset = build_from_yaml(data_config)
     data_shape = dataset.data_shape()
-    n_labels = data_shape.y_dim
+    n_labels = data_shape.y_dim if not cyclical else 2
     embedding_path = os.path.join(save_dir, "embedding.pt")
     os.makedirs(os.path.dirname(embedding_path), exist_ok=True)
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
