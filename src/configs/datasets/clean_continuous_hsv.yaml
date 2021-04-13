@@ -1,0 +1,6 @@
+class: data.fashion_mnist.HSVFashionMNIST
+kwargs:
+  root: /storage/data/FashionMNIST
+  train: true
+  download: true
+  noisy_labels: false
