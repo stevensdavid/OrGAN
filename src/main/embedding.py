@@ -11,6 +11,7 @@ from torch import nn, optim
 from torch.cuda.amp import GradScaler, autocast
 from torch.linalg import Tensor
 from torch.utils.data import DataLoader
+from util.cyclical_encoding import to_cyclical
 from util.enums import DataSplit
 from util.object_loader import build_from_yaml
 from util.pytorch_utils import seed_worker, set_seeds
@@ -32,6 +33,7 @@ def parse_args() -> Namespace:
         "--patience", default=5, type=int, help="Early stopping patience"
     )
     parser.add_argument("--embedding_dim", type=int, default=128)
+    parser.add_argument("--cyclical", action="store_true")
     return parser.parse_args()
 
 
@@ -44,6 +46,7 @@ def _train_model(
     target_fn: Callable[[Tensor], Tensor],
     model_input_getter: Callable[[Tensor, Tensor], Tensor],
     target_input_getter: Callable[[Tensor, Tensor], Tensor],
+    cyclical: bool = False,
 ) -> nn.Module:
     module.to(device)
     model = nn.DataParallel(module)
@@ -66,6 +69,8 @@ def _train_model(
         model.train()
         dataset.set_mode(DataSplit.TRAIN)
         for x, y in iter(data_loader):
+            if cyclical:
+                y = to_cyclical(y)
             optimizer.zero_grad()
             loss = sample_loss(x, y)
             scaler.scale(loss).backward()
@@ -77,6 +82,8 @@ def _train_model(
         total_loss = 0
         with torch.no_grad():
             for x, y in iter(data_loader):
+                if cyclical:
+                    y = to_cyclical(y)
                 loss = sample_loss(x, y)
                 total_loss += loss
         mean_loss = total_loss / len(data_loader)
@@ -103,6 +110,7 @@ def train_or_load_feature_extractor(
     n_labels: int,
     patience: int,
     save_path: str,
+    cyclical: bool = False,
 ) -> ConvLabelClassifier:
     model = ConvLabelClassifier(embedding_dim, n_labels=n_labels)
     if os.path.exists(save_path):
@@ -121,6 +129,7 @@ def train_or_load_feature_extractor(
         target_fn=lambda y: y,
         model_input_getter=lambda x, y: x,
         target_input_getter=lambda x, y: y,
+        cyclical=cyclical,
     )
     torch.save(model.state_dict(), save_path)
     model.eval()
@@ -136,6 +145,7 @@ def train_embedding(
     patience: int,
     feature_extractor: ConvLabelClassifier,
     save_path: str,
+    cyclical: bool = False,
 ) -> LabelEmbedding:
     LOG.info("Training embedding")
     model = LabelEmbedding(embedding_dim, n_labels)
@@ -150,6 +160,7 @@ def train_embedding(
         target_fn=feature_extractor,
         model_input_getter=lambda _, y: y,
         target_input_getter=lambda x, _: x,
+        cyclical=cyclical,
     )
     torch.save(model.state_dict, save_path)
     model.eval()
@@ -163,6 +174,7 @@ def train_or_load_embedding(
     n_workers: int,
     patience: int,
     embedding_dim: int,
+    cyclical: bool,
 ) -> LabelEmbedding:
     dataset: AbstractDataset = build_from_yaml(data_config)
     data_shape = dataset.data_shape()
@@ -187,7 +199,14 @@ def train_or_load_embedding(
     resnet_path = os.path.join(save_dir, "feature_extractor.pt")
     os.makedirs(os.path.dirname(resnet_path), exist_ok=True)
     resnet = train_or_load_feature_extractor(
-        embedding_dim, dataset, data_loader, device, n_labels, patience, resnet_path
+        embedding_dim,
+        dataset,
+        data_loader,
+        device,
+        n_labels,
+        patience,
+        resnet_path,
+        cyclical,
     )
     embedding = train_embedding(
         embedding_dim,
@@ -198,6 +217,7 @@ def train_or_load_embedding(
         patience,
         resnet,
         embedding_path,
+        cyclical,
     )
     return embedding
 

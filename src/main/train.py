@@ -24,6 +24,7 @@ from torch.cuda.amp import GradScaler, autocast
 from torch.optim import Adam
 from torch.utils.data import DataLoader
 from tqdm import trange
+from util.cyclical_encoding import to_cyclical
 from util.dataclasses import TrainingConfig
 from util.enums import DataSplit, FrequencyMetric, MultiGPUType, VicinityType
 from util.logging import Logger
@@ -56,6 +57,7 @@ def parse_args() -> Tuple[Namespace, dict]:
     parser.add_argument(
         "--n_workers", type=int, default=0, help="Data loading workers. Skipped if DDP."
     )
+    parser.add_argument("--cyclical", action="store_true", help="Use cyclical encoding")
     parser.add_argument("--ccgan", action="store_true")
     parser.add_argument("--ccgan_vicinity_type", type=str, choices=["hard", "soft"])
     parser.add_argument(
@@ -142,6 +144,9 @@ def train(gpu: int, args: Namespace, train_conf: TrainingConfig):
     val_dataset: AbstractDataset = build_from_yaml(args.data_config)
     val_dataset.set_mode(DataSplit.VAL)
     data_shape = train_dataset.data_shape()
+    if args.cyclical:
+        # cyclical features are encoded as cos(x), sin(x) [two dimensions]
+        data_shape.y_dim = 2
     if args.ccgan:
         vicinity_type = (
             VicinityType.HARD
@@ -252,6 +257,9 @@ def train(gpu: int, args: Namespace, train_conf: TrainingConfig):
                 sample_weights = torch.ones(args.batch_size)
                 target_weights = torch.ones(args.batch_size)
                 target_labels = train_dataset.random_targets(labels.shape)
+            if args.cyclical:
+                labels = to_cyclical(labels)
+                target_labels = to_cyclical(target_labels)
             samples = samples.to(device, non_blocking=True)
             labels = labels.to(device, non_blocking=True)
             sample_weights = sample_weights.to(device, non_blocking=True)
@@ -274,6 +282,8 @@ def train(gpu: int, args: Namespace, train_conf: TrainingConfig):
 
             if step % d_updates_per_g_update == 0:
                 target_labels = train_dataset.random_targets(labels.shape)
+                if args.cyclical:
+                    target_labels = to_cyclical(target_labels)
                 target_labels = target_labels.to(device, non_blocking=True)
                 target_labels = embed_target(target_labels)
                 generator_opt.zero_grad()
@@ -328,6 +338,8 @@ def train(gpu: int, args: Namespace, train_conf: TrainingConfig):
                     cuda_labels = torch.unsqueeze(target_labels, 1).to(
                         device, non_blocking=True
                     )
+                    if args.cyclical:
+                        cuda_labels = to_cyclical(cuda_labels)
                     generator_labels = embed_target(cuda_labels)
 
                     val_dataset: HSVFashionMNIST  # TODO: break assumption
