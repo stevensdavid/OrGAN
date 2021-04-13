@@ -285,13 +285,9 @@ def train(gpu: int, args: Namespace, train_conf: TrainingConfig):
                 if args.cyclical:
                     target_labels = to_cyclical(target_labels)
                 target_labels = target_labels.to(device, non_blocking=True)
-                target_labels = embed_target(target_labels)
+                target_labels = embed_input(target_labels)
+                embedded_labels = embed_input(labels)
                 generator_opt.zero_grad()
-                if args.embed_discriminator:
-                    embedded_labels = labels
-                else:
-                    embedded_labels = embed_target(labels)
-
                 # Update generator less often
                 with autocast():
                     generator_loss = model.module.generator_loss(
