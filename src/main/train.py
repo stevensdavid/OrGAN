@@ -337,13 +337,13 @@ def train(gpu: int, args: Namespace, train_conf: TrainingConfig):
                     )
                     if args.cyclical:
                         cuda_labels = to_cyclical(cuda_labels)
-                    generator_labels = generator_labels(cuda_labels)
+                    cuda_labels = generator_labels(cuda_labels)
 
                     val_dataset: HSVFashionMNIST  # TODO: break assumption
                     ground_truth = val_dataset.ground_truths(samples, target_labels)
                     with autocast():
                         generated = model.module.generator.transform(
-                            cuda_samples, generator_labels
+                            cuda_samples, cuda_labels
                         )
                     cuda_ground_truth = torch.tensor(ground_truth, device=device)
                     total_norm += torch.sum(
