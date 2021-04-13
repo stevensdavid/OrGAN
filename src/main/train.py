@@ -235,11 +235,11 @@ def train(gpu: int, args: Namespace, train_conf: TrainingConfig):
     if rank == 0:
         wandb.watch(model.module)
 
-    def embed_target(y):
+    def generator_labels(y):
         with torch.no_grad():
             return embedding(y).detach() if args.ccgan else y
 
-    def embed_input(y):
+    def discriminator_labels(y):
         with torch.no_grad():
             return embedding(y).detach() if args.embed_discriminator else y
 
@@ -265,8 +265,8 @@ def train(gpu: int, args: Namespace, train_conf: TrainingConfig):
             labels = labels.to(device, non_blocking=True)
             sample_weights = sample_weights.to(device, non_blocking=True)
             target_labels = target_labels.to(device, non_blocking=True)
-            embedded_target_labels = embed_target(target_labels)
-            labels = embed_input(labels)
+            embedded_target_labels = generator_labels(target_labels)
+            labels = discriminator_labels(labels)
 
             discriminator_opt.zero_grad()
             with autocast():
@@ -286,8 +286,8 @@ def train(gpu: int, args: Namespace, train_conf: TrainingConfig):
                 if args.cyclical:
                     target_labels = to_cyclical(target_labels)
                 target_labels = target_labels.to(device, non_blocking=True)
-                target_labels = embed_input(target_labels)
-                embedded_labels = embed_target(labels)
+                target_labels = discriminator_labels(target_labels)
+                embedded_labels = generator_labels(labels)
                 generator_opt.zero_grad()
                 # Update generator less often
                 with autocast():
@@ -337,7 +337,7 @@ def train(gpu: int, args: Namespace, train_conf: TrainingConfig):
                     )
                     if args.cyclical:
                         cuda_labels = to_cyclical(cuda_labels)
-                    generator_labels = embed_target(cuda_labels)
+                    generator_labels = generator_labels(cuda_labels)
 
                     val_dataset: HSVFashionMNIST  # TODO: break assumption
                     ground_truth = val_dataset.ground_truths(samples, target_labels)
