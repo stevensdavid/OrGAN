@@ -15,3 +15,4 @@ ccgan_vicinity_type: soft
 ccgan_embedding_file: /storage/embeddings/cyclical_clean_continuous_hsv/embedding.pt
 ccgan_embedding_dim: 128
 embed_discriminator: False
+cyclical: True
