@@ -136,13 +136,11 @@ class Discriminator(AbstractDiscriminator):
             kernel_size=regressor_kernel_size,
             bias=False,
         )
-        self.sigmoid = nn.Sigmoid()
 
     def forward(self, x: Tensor) -> Tuple[Tensor, Tensor]:
         h = self.hidden_layers(x)
         image_source = self.discriminator(h)
         image_label = self.regressor(h)
-        image_label = self.sigmoid(image_label)
 
         return (
             image_source,

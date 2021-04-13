@@ -58,7 +58,6 @@ class LabelEmbedding(nn.Module):
             nn.GroupNorm(8, embedding_dim),
             nn.ReLU(),
             nn.Linear(embedding_dim, embedding_dim),
-            nn.ReLU(),
         )
 
     @autocast()
