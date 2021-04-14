@@ -14,6 +14,7 @@ from util.pytorch_utils import ConditionalInstanceNorm2d, conv2d_output_size
 
 from models import patchgan
 from models.fpgan import FPGAN, DiscriminatorLoss, GeneratorLoss
+from models.stargan import StarGAN
 
 
 @dataclass
@@ -151,6 +152,75 @@ class CCDiscriminator(nn.Module):
         h = self.x_output(h_x) + y_output.view(-1, 1, 1, 1)
         image_source = self.sigmoid(h)
         return image_source
+
+
+class CCStarGAN(StarGAN):
+    def __init__(
+        self,
+        data_shape: DataShape,
+        device,
+        g_conv_dim: int,
+        g_num_bottleneck: int,
+        d_conv_dim: int,
+        d_num_scales: int,
+        l_rec: float,
+        l_grad_penalty: float,
+        l_mse: Optional[float] = None,  # Only needed if not ccgan_discriminator
+        embed_discriminator: bool = False,
+        **kwargs
+    ):
+        super().__init__(
+            data_shape,
+            device,
+            g_conv_dim,
+            g_num_bottleneck,
+            d_conv_dim,
+            d_num_scales,
+            l_mse,
+            l_rec,
+            l_grad_penalty,
+            **kwargs
+        )
+        self.generator = CCGenerator(data_shape, g_conv_dim, g_num_bottleneck)
+        self.ccgan_discriminator = embed_discriminator
+        if self.ccgan_discriminator:
+            self.discriminator = CCDiscriminator(data_shape, d_conv_dim, d_num_scales)
+        elif l_mse is None:
+            raise TypeError("Missing mandatory hyperparameter for PatchGAN disc: l_mse")
+
+    def discriminator_loss(
+        self,
+        input_image: Tensor,
+        input_label: Tensor,
+        embedded_target_label: Tensor,
+        sample_weights: Tensor,
+        target_weights: Tensor,
+    ) -> Union[CCDiscriminatorLoss, DiscriminatorLoss]:
+        if not self.ccgan_discriminator:
+            return super().discriminator_loss(
+                input_image, input_label, embedded_target_label, sample_weights
+            )
+        raise NotImplementedError()
+
+
+    def generator_loss(
+        self,
+        input_image: Tensor,
+        input_label: Tensor,
+        embedded_input_label: Tensor,
+        target_label: Tensor,
+        embedded_target_label: Tensor,
+        sample_weights: Tensor,
+    ) -> Union[CCGeneratorLoss, GeneratorLoss]:
+        if not self.ccgan_discriminator:
+            return super().generator_loss(
+                input_image,
+                input_label,
+                embedded_input_label,
+                target_label,
+                embedded_target_label,
+            )
+        raise NotImplementedError()
 
 
 class CCFPGAN(FPGAN):
