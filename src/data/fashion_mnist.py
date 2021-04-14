@@ -1,3 +1,4 @@
+from multiprocessing import Value
 from typing import Any, Callable, List, Optional, Tuple
 
 import numpy as np
@@ -22,7 +23,8 @@ class HSVFashionMNIST(FashionMNIST, AbstractDataset):
         download: bool = False,
         simplified: bool = False,
         n_clusters: Optional[int] = None,
-        noisy_labels: bool=True,
+        noisy_labels: bool = True,
+        fixed_labels: bool = True,
     ) -> None:
         super().__init__(
             root,
@@ -33,6 +35,7 @@ class HSVFashionMNIST(FashionMNIST, AbstractDataset):
         )
         self.mode = DataSplit.TRAIN if train else DataSplit.TEST
         self.simplified = simplified
+        self.fixed_labels = fixed_labels
         # FashionMNIST is split into train and test.
         # Create validation split if we are training
         total_samples = super().__len__()
@@ -41,6 +44,8 @@ class HSVFashionMNIST(FashionMNIST, AbstractDataset):
             self.len_val = total_samples - self.len_train
         # Generate random labels *once*
         np.random.seed(0)
+        self.n_clusters = n_clusters
+        self.noisy_labels = noisy_labels
         if n_clusters is None:
             self.hues = np.random.rand(total_samples)
             self.ys = self.hues
@@ -67,8 +72,19 @@ class HSVFashionMNIST(FashionMNIST, AbstractDataset):
         x, _ = super().__getitem__(index)
         x = np.array(x, dtype=float)
         x /= 255  # Normalize for hue shift
-        y = self.ys[index]
-        hue = self.hues[index]
+        if self.fixed_labels:
+            y = self.ys[index]
+            hue = self.hues[index]
+        else:
+            if self.n_clusters is not None:
+                idx = np.random.randint(0, len(self.ys))
+                y = self.ys[idx]
+                hue = self.hues[idx]
+            else:
+                y = np.random.rand()
+                hue = y
+                if self.noisy_labels:
+                    raise ValueError("Noisy labels not supported without fixed labels.")
         x = self.shift_hue(x, hue)
         x = torch.tensor(x, dtype=torch.float32)
         y = torch.tensor([y], dtype=torch.float32)
