@@ -1,0 +1,16 @@
+epochs: 300000
+batch_size: 1400
+data_config: configs/datasets/hue_f_mnist.yaml
+checkpoint_dir: /storage/checkpoints
+experiment_name: HSV_StarGAN
+train_config: "configs/training.yaml"
+model: models.stargan.STARGAN
+model_hyperparams: configs/models/fpgan.yaml
+n_nodes: 1
+n_gpus: 4
+n_workers: 5
+node_rank: 0
+ccgan: True
+ccgan_vicinity_type: soft
+ccgan_embedding_file: /storage/embeddings/hsv_fmnist/embedding.pt
+ccgan_embedding_dim: 128
