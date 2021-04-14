@@ -4,7 +4,7 @@ data_config: configs/datasets/hue_f_mnist.yaml
 checkpoint_dir: /storage/checkpoints
 experiment_name: HSV_StarGAN
 train_config: "configs/training.yaml"
-model: models.stargan.STARGAN
+model: models.ccgan.CCStarGAN
 model_hyperparams: configs/models/fpgan.yaml
 n_nodes: 1
 n_gpus: 4
