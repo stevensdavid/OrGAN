@@ -1,0 +1,158 @@
+"""
+StarGAN type implementation adapted from FPGAN
+"""
+from dataclasses import dataclass
+
+import torch
+import torch.autograd
+from torch import Tensor, nn
+from util.dataclasses import DataclassExtensions, DataShape
+
+from models.abstract_model import AbstractI2I
+from models.patchgan import Discriminator, Generator
+
+
+@dataclass
+class Hyperparams:
+    g_conv_dim: int
+    g_num_bottleneck: int
+    d_conv_dim: int
+    d_num_scales: int
+    l_mse: float
+    l_rec: float
+    l_grad_penalty: float
+
+
+@dataclass
+class DiscriminatorLoss(DataclassExtensions):
+    total: Tensor
+    classification_real: Tensor
+    classification_fake: Tensor
+    label_error: Tensor
+    gradient_penalty: Tensor
+
+
+@dataclass
+class GeneratorLoss(DataclassExtensions):
+    total: Tensor
+    classification_fake: Tensor
+    label_error: Tensor
+    reconstruction: Tensor
+
+
+class StarGAN(nn.Module, AbstractI2I):
+    def __init__(
+        self,
+        data_shape: DataShape,
+        device,
+        g_conv_dim: int,
+        g_num_bottleneck: int,
+        d_conv_dim: int,
+        d_num_scales: int,
+        l_mse: float,
+        l_rec: float,
+        l_id: float,
+        l_grad_penalty: float,
+        **kwargs,
+    ):
+        super().__init__()
+        self.data_shape = data_shape
+        self.device = device
+        self.hyperparams = Hyperparams(
+            g_conv_dim=g_conv_dim,
+            g_num_bottleneck=g_num_bottleneck,
+            d_conv_dim=d_conv_dim,
+            d_num_scales=d_num_scales,
+            l_mse=l_mse,
+            l_rec=l_rec,
+            l_grad_penalty=l_grad_penalty,
+        )
+        self.generator = Generator(
+            self.data_shape,
+            self.hyperparams.g_conv_dim,
+            self.hyperparams.g_num_bottleneck,
+        )
+        self.discriminator = Discriminator(
+            self.data_shape, self.hyperparams.d_conv_dim, self.hyperparams.d_num_scales
+        )
+        self.square_error = nn.MSELoss(reduction="none")
+        self.mse = nn.MSELoss()
+
+    def discriminator_loss(
+        self,
+        input_image: Tensor,
+        input_label: Tensor,
+        embedded_target_label: Tensor,
+        sample_weights: Tensor,
+    ) -> DiscriminatorLoss:
+        sample_weights = sample_weights.view(-1, 1, 1, 1)
+        # Discriminator losses with real images
+        sources, labels = self.discriminator(input_image)
+        classification_real = -torch.mean(
+            torch.mean(sources, dim=1)
+        )  # Should be 0 (real) for all
+        label_real = self.hyperparams.l_mse * torch.mean(
+            sample_weights * self.square_error(labels, input_label)
+        )
+        # Discriminator losses with fake images
+        fake_image = self.generator.transform(input_image, embedded_target_label)
+        sources, _ = self.discriminator(fake_image)
+        classification_fake = torch.mean(
+            torch.mean(sources, dim=1)
+        )  # Should be 1 (fake) for all
+        # Gradient penalty loss
+        alpha = torch.rand(input_image.size(0), 1, 1, 1).to(self.device)
+        # Blend real and fake image randomly
+        x_hat = (
+            alpha * input_image.data + (1 - alpha) * fake_image.data
+        ).requires_grad_(True)
+        grad_sources, _ = self.discriminator(x_hat)
+        weight = torch.ones(grad_sources.size(), device=self.device)
+        gradient = torch.autograd.grad(
+            outputs=grad_sources,
+            inputs=x_hat,
+            grad_outputs=weight,
+            retain_graph=True,
+            create_graph=True,
+            only_inputs=True,
+        )[0]
+        gradient = gradient.view(gradient.size(0), -1)
+        gradient_norm = torch.sqrt(torch.sum(gradient ** 2, dim=1))
+        gradient_penalty = torch.mean((gradient_norm - 1) ** 2)
+        gradient_penalty *= self.hyperparams.l_grad_penalty
+
+        total = (
+            classification_real + classification_fake + label_real + gradient_penalty
+        )
+        return DiscriminatorLoss(
+            total,
+            classification_real,
+            classification_fake,
+            label_real,
+            gradient_penalty,
+        )
+
+    def generator_loss(
+        self,
+        input_image: Tensor,
+        input_label: Tensor,
+        embedded_input_label: Tensor,
+        target_label: Tensor,
+        embedded_target_label: Tensor,
+    ) -> GeneratorLoss:
+        # Input to target
+        fake_image = self.generator.transform(input_image, embedded_target_label)
+        sources, labels = self.discriminator(fake_image)
+        g_loss_fake = -torch.mean(sources)
+        g_loss_mse = self.hyperparams.l_mse * self.mse(labels, target_label)
+
+        # Target to input
+        reconstructed_image = self.generator.transform(fake_image, embedded_input_label)
+        g_loss_rec = self.hyperparams.l_rec * torch.mean(
+            torch.abs(input_image - reconstructed_image)
+        )
+
+        total = g_loss_fake + g_loss_mse + g_loss_rec
+
+        return GeneratorLoss(total, g_loss_fake, g_loss_mse, g_loss_rec,)
+
