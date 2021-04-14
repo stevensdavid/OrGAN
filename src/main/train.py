@@ -378,10 +378,11 @@ def train(gpu: int, args: Namespace, train_conf: TrainingConfig):
             )
             loss_logger.track_summary_metric("val_norm", val_norm)
             loss_logger.track_summary_metric("val_mae", val_mae)
-        loss_logger.track_summary_metric("epoch", epoch)
+            loss_logger.track_summary_metric("epoch", epoch)
     # Training finished
-    model.module.save_checkpoint(step, checkpoint_dir)
-    loss_logger.finish()
+    if rank == 0:
+        model.module.save_checkpoint(step, checkpoint_dir)
+        loss_logger.finish()
 
 
 def main():
