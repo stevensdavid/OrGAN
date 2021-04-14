@@ -90,6 +90,8 @@ class FPGAN(nn.Module, AbstractI2I):
         input_label: Tensor,
         embedded_target_label: Tensor,
         sample_weights: Tensor,
+        *args,
+        **kwargs,
     ) -> DiscriminatorLoss:
         sample_weights = sample_weights.view(-1, 1, 1, 1)
         # TODO: add gradient penalty
@@ -142,6 +144,8 @@ class FPGAN(nn.Module, AbstractI2I):
         embedded_input_label: Tensor,
         target_label: Tensor,
         embedded_target_label: Tensor,
+        *args,
+        **kwargs,
     ) -> GeneratorLoss:
         # Input to target
         fake_image = self.generator.transform(input_image, embedded_target_label)

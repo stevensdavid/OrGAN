@@ -51,7 +51,6 @@ class StarGAN(nn.Module, AbstractI2I):
         d_num_scales: int,
         l_mse: float,
         l_rec: float,
-        l_id: float,
         l_grad_penalty: float,
         **kwargs,
     ):
@@ -84,6 +83,8 @@ class StarGAN(nn.Module, AbstractI2I):
         input_label: Tensor,
         embedded_target_label: Tensor,
         sample_weights: Tensor,
+        *args,
+        **kwargs,
     ) -> DiscriminatorLoss:
         sample_weights = sample_weights.view(-1, 1, 1, 1)
         # Discriminator losses with real images
