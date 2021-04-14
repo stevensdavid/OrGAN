@@ -70,6 +70,8 @@ def parse_args() -> Tuple[Namespace, dict]:
     parser.add_argument("--args_file", type=str, help="YAML file with CLI args")
     parser.add_argument("--ccgan_embedding_dim", type=int)
     parser.add_argument("--multi_gpu_type", type=str, choices=["ddp", "dp"])
+    parser.add_argument("--label_noise_variance", type=float)
+    parser.add_argument("--ccgan_wrapper", action="store_true")
     args, unknown = parser.parse_known_args()
     hyperparams = {}
     if unknown:
@@ -147,7 +149,7 @@ def train(gpu: int, args: Namespace, train_conf: TrainingConfig):
     if args.cyclical:
         # cyclical features are encoded as cos(x), sin(x) [two dimensions]
         data_shape.y_dim = 2
-    if args.ccgan:
+    if args.ccgan_wrapper:
         vicinity_type = (
             VicinityType.HARD
             if args.ccgan_vicinity_type == "hard"
@@ -160,6 +162,7 @@ def train(gpu: int, args: Namespace, train_conf: TrainingConfig):
             n_neighbours=hyperparams["ccgan_n_neighbours"],
         )
         train_dataset.set_mode(DataSplit.TRAIN)
+    if args.ccgan:
         embedding = LabelEmbedding(args.ccgan_embedding_dim, n_labels=data_shape.y_dim)
         embedding.load_state_dict(torch.load(args.ccgan_embedding_file)())
         embedding.to(device)
@@ -246,7 +249,7 @@ def train(gpu: int, args: Namespace, train_conf: TrainingConfig):
     for epoch in trange(args.epochs, desc="Epoch", disable=rank != 0):
         model.module.set_train()
         for samples, labels in iter(train_data):
-            if args.ccgan:
+            if args.ccgan_wrapper:
                 target_labels, labels, sample_weights, target_weights = (
                     labels["target_labels"],
                     labels["labels"],
@@ -257,6 +260,15 @@ def train(gpu: int, args: Namespace, train_conf: TrainingConfig):
                 sample_weights = torch.ones(args.batch_size)
                 target_weights = torch.ones(args.batch_size)
                 target_labels = train_dataset.random_targets(labels.shape)
+            if "label_noise_variance" in hyperparams:
+                labels = (
+                    labels
+                    + torch.normal(
+                        mean=torch.zeros_like(labels),
+                        std=torch.ones_like(labels)
+                        * hyperparams["label_noise_variance"],
+                    )
+                ) % 1  # TODO: generalize
             raw_labels = labels
             if args.cyclical:
                 labels = to_cyclical(labels)
