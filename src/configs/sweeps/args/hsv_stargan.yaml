@@ -5,7 +5,7 @@ checkpoint_dir: /storage/checkpoints
 experiment_name: HSV_StarGAN
 train_config: "configs/training.yaml"
 model: models.ccgan.CCStarGAN
-model_hyperparams: configs/models/fpgan.yaml
+model_hyperparams: configs/models/stargan.yaml
 n_nodes: 1
 n_gpus: 4
 n_workers: 5
