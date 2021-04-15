@@ -9,7 +9,7 @@ command:
 method: bayes
 early_terminate:
   type: hyperband
-  min_iter: 500
+  min_iter: 250
 metric:
   name: val_mae
   goal: minimize
