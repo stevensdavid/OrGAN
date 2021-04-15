@@ -211,7 +211,6 @@ def train(gpu: int, args: Namespace, train_conf: TrainingConfig):
         else len(train_data)
     )
     checkpoint_dir = path.join(args.checkpoint_dir, args.run_name)
-    os.makedirs(checkpoint_dir, exist_ok=True)
     loss_logger = Logger(log_frequency)
     optimizer_file = path.join(checkpoint_dir, "optimizers.json")
     if args.resume_from is not None:
@@ -321,6 +320,7 @@ def train(gpu: int, args: Namespace, train_conf: TrainingConfig):
                 )
             step += 1
             if step % checkpoint_frequency == 0 and rank == 0:
+                os.makedirs(checkpoint_dir, exist_ok=True)
                 torch.save(
                     {
                         "g_opt": generator_opt.state_dict(),
