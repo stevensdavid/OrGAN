@@ -21,6 +21,10 @@ class ConditionalInstanceNorm2d(nn.Module):
         return out
 
 
+def count_parameters(model):
+    return sum(p.numel() for p in model.parameters() if p.requires_grad)
+
+
 def set_seeds(seed: int):
     np.random.seed(seed)
     torch.manual_seed(seed)
