@@ -213,10 +213,10 @@ def train(gpu: int, args: Namespace, train_conf: TrainingConfig):
     checkpoint_dir = path.join(args.checkpoint_dir, args.run_name)
     os.makedirs(checkpoint_dir, exist_ok=True)
     loss_logger = Logger(log_frequency)
+    optimizer_file = path.join(checkpoint_dir, "optimizers.json")
     if args.resume_from is not None:
         loss_logger.restore(checkpoint_dir)
-        with open(path.join(checkpoint_dir, "optimizers.json"), "r") as f:
-            opt_state = torch.load(f)
+        opt_state = torch.load(optimizer_file)
         generator_opt.load_state_dict(opt_state["g_opt"])
         discriminator_opt.load_state_dict(opt_state["d_opt"])
         model.load_checkpoint(args.resume_from, checkpoint_dir)
@@ -321,14 +321,13 @@ def train(gpu: int, args: Namespace, train_conf: TrainingConfig):
                 )
             step += 1
             if step % checkpoint_frequency == 0 and rank == 0:
-                with open(path.join(checkpoint_dir, "optimizers.json"), "w") as f:
-                    torch.save(
-                        {
-                            "g_opt": generator_opt.state_dict(),
-                            "d_opt": discriminator_opt.state_dict(),
-                        },
-                        f,
-                    )
+                torch.save(
+                    {
+                        "g_opt": generator_opt.state_dict(),
+                        "d_opt": discriminator_opt.state_dict(),
+                    },
+                    optimizer_file,
+                )
                 loss_logger.save(checkpoint_dir)
                 model.module.save_checkpoint(step, checkpoint_dir)
         # Validate

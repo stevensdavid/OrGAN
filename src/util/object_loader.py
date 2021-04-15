@@ -1,8 +1,13 @@
-import yaml
-from typing import Any
 from inspect import signature
 from pydoc import locate
-from typing import Type
+from typing import Any, Type
+
+import yaml
+
+
+def qualified_type_name(t: Any) -> str:
+    t = type(t)
+    return f"{t.__module__}.{t.__name__}"
 
 
 def load_yaml(filepath) -> dict:

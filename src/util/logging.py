@@ -6,7 +6,8 @@ from pydoc import locate
 
 import numpy as np
 import wandb
-from models.abstract_model import AbstractI2I
+
+from util.object_loader import qualified_type_name
 
 
 def add_key_prefix(dictionary: dict, prefix: str, separator: str = "/") -> dict:
@@ -75,8 +76,10 @@ class Logger:
                     "generator_loss": asdict(self.generator_loss),
                     "discriminator_loss": asdict(self.discriminator_loss),
                     "steps": self.steps,
-                    "generator_loss_type": type(self.generator_loss),
-                    "discriminator_loss_type": type(self.discriminator_loss),
+                    "generator_loss_type": qualified_type_name(self.generator_loss),
+                    "discriminator_loss_type": qualified_type_name(
+                        self.discriminator_loss
+                    ),
                 },
                 f,
             )
