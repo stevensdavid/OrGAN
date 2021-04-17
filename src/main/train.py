@@ -274,7 +274,9 @@ def train(gpu: int, args: Namespace, train_conf: TrainingConfig):
                         std=torch.ones_like(labels)
                         * hyperparams["label_noise_variance"],
                     )
-                ) % 1  # TODO: generalize
+                )
+                if args.cyclical:
+                    labels %= 1
             raw_labels = labels
             if args.cyclical:
                 labels = to_cyclical(labels)
