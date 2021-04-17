@@ -72,6 +72,7 @@ def parse_args() -> Tuple[Namespace, dict]:
     parser.add_argument("--multi_gpu_type", type=str, choices=["ddp", "dp"])
     parser.add_argument("--label_noise_variance", type=float)
     parser.add_argument("--ccgan_wrapper", action="store_true")
+    parser.add_argument("--log_hyperparams", action="store_true")
     args, unknown = parser.parse_known_args()
     hyperparams = {}
     if unknown:
@@ -121,6 +122,11 @@ def get_ddp_datastore(rank: int, args: Namespace, tcp: bool):
 def get_wandb_hyperparams(args: Namespace) -> dict:
     wandb.init(project="msc", name=args.run_name, config=args, id=args.run_name)
     hyperparams = {**vars(args), **wandb.config}
+    if args.log_hyperparams:
+        # TODO: assumes that only logarithmized hyperparams are floats
+        hyperparams = {
+            k: 10 ** v if isinstance(v, float) else v for k, v in hyperparams.items()
+        }
     return hyperparams
 
 
