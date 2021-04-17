@@ -118,7 +118,7 @@ def train_or_load_feature_extractor(
         model.load_state_dict(torch.load(save_path))
         model.to(device)
         model.eval()
-        return model.t1
+        return model.resnet
     LOG.info("Training new ResNet")
     model = _train_model(
         model,
@@ -133,7 +133,7 @@ def train_or_load_feature_extractor(
     )
     torch.save(model.state_dict(), save_path)
     model.eval()
-    return model.t1
+    return model.resnet
 
 
 def train_embedding(
