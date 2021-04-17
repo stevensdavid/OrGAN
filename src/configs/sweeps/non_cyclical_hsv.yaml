@@ -5,7 +5,7 @@ command:
   - "-m"
   - ${program}
   - "--args_file"
-  - "configs/sweeps/args/hsv_stargan.yaml"
+  - "configs/sweeps/args/non_cyclical_hsv.yaml"
   - "--log_hyperparams"
 method: bayes
 early_terminate:
