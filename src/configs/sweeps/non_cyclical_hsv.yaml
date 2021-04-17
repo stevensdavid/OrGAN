@@ -15,10 +15,6 @@ metric:
   name: val_mae
   goal: minimize
 parameters:
-  l_mse:
-    distribution: uniform
-    min: -1.0
-    max: 1.0
   l_rec:
     distribution: uniform
     min: -1.0
@@ -27,7 +23,10 @@ parameters:
     distribution: uniform
     min: -1.0
     max: 1.0
-  label_noise_variance:
+  ccgan_sigma:
     distribution: uniform
     min: -3.0
     max: -1.0
+  ccgan_n_neighbours:
+    min: 1
+    max: 3

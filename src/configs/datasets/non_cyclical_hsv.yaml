@@ -3,7 +3,7 @@ kwargs:
   root: /storage/data/FashionMNIST
   train: true
   download: true
-  n_clusters: 20
+  n_clusters: null # Use continuous labels
   noisy_labels: false
   cyclical: false
   min_hue: 0.0
