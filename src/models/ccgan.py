@@ -68,9 +68,26 @@ class LabelEmbedding(nn.Module):
 
 
 class ConvLabelClassifier(nn.Module):
-    def __init__(self, embedding_dim=128, n_labels=1):
+    def __init__(
+        self, embedding_dim: int = 128, n_labels: int = 1, resnet_size: int = 18,
+    ):
         super().__init__()
-        self.t1 = resnet18(pretrained=False)
+        if resnet_size == 18:
+            resnet = resnet18
+        elif resnet_size == 34:
+            resnet = resnet34
+        elif resnet_size == 50:
+            resnet = resnet50
+        elif resnet_size == 101:
+            resnet = resnet101
+        elif resnet_size == 152:
+            resnet = resnet152
+        else:
+            raise ValueError(
+                f"Unsupported ResNet size: {resnet_size}.\n"
+                + "Valid sizes are: 18, 34, 50, 101, 152"
+            )
+        self.t1 = resnet(pretrained=False)
         # Remove final FC layer, add FC to reach embedding dim
         old_fc = self.t1.fc
         self.t1.fc = nn.Linear(old_fc.in_features, embedding_dim)
