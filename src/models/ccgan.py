@@ -36,6 +36,13 @@ class CCGeneratorLoss(DataclassExtensions):
     id_reconstruction: Tensor
 
 
+@dataclass
+class CCStarGANGeneratorLoss(DataclassExtensions):
+    total: Tensor
+    classification_fake: Tensor
+    reconstruction: Tensor
+
+
 class LabelEmbedding(nn.Module):
     def __init__(self, embedding_dim: int = 128, n_labels: int = 1):
         super().__init__()
@@ -226,7 +233,50 @@ class CCStarGAN(StarGAN):
             return super().discriminator_loss(
                 input_image, input_label, embedded_target_label, sample_weights
             )
-        raise NotImplementedError()
+        # CCDiscriminator doesn't output class, so we don't need label losses
+
+        sample_weights = sample_weights.view(-1, 1, 1, 1)
+        # Discriminator losses with real images
+        sources = self.discriminator(input_image, input_label)
+        classification_real = -torch.mean(
+            sample_weights * torch.mean(sources, dim=1)
+        )  # Should be 0 (real) for all
+        # Discriminator losses with fake images
+        fake_image = self.generator.transform(input_image, embedded_target_label)
+        sources = self.discriminator(fake_image, embedded_target_label)
+        target_weights = sample_weights.view(-1, 1, 1, 1)
+        classification_fake = torch.mean(
+            target_weights * torch.mean(sources, dim=1)
+        )  # Should be 1 (fake) for all
+        # Gradient penalty loss
+        alpha = torch.rand(input_image.size(0), 1, 1, 1).to(self.device)
+        # Blend real and fake image randomly
+        x_hat = (
+            alpha * input_image.data + (1 - alpha) * fake_image.data
+        ).requires_grad_(True)
+        alpha = alpha.view(-1, 1)
+        y_hat = (
+            alpha * input_label + (1 - alpha) * embedded_target_label
+        ).requires_grad_(True)
+        grad_sources = self.discriminator(x_hat, y_hat)
+        weight = torch.ones(grad_sources.size(), device=self.device)
+        gradient = torch.autograd.grad(
+            outputs=grad_sources,
+            inputs=[x_hat, y_hat],
+            grad_outputs=weight,
+            retain_graph=True,
+            create_graph=True,
+            only_inputs=True,
+        )[0]
+        gradient = gradient.view(gradient.size(0), -1)
+        gradient_norm = torch.sqrt(torch.sum(gradient ** 2, dim=1))
+        gradient_penalty = torch.mean((gradient_norm - 1) ** 2)
+        gradient_penalty *= self.hyperparams.l_grad_penalty
+
+        total = classification_real + classification_fake + gradient_penalty
+        return CCDiscriminatorLoss(
+            total, classification_real, classification_fake, gradient_penalty,
+        )
 
     def generator_loss(
         self,
@@ -245,7 +295,20 @@ class CCStarGAN(StarGAN):
                 target_label,
                 embedded_target_label,
             )
-        raise NotImplementedError()
+        # Input to target
+        fake_image = self.generator.transform(input_image, embedded_target_label)
+        sources = self.discriminator(fake_image, embedded_target_label)
+        g_loss_fake = -torch.mean(torch.mean(sources, dim=1))
+
+        # Target to input
+        reconstructed_image = self.generator.transform(fake_image, embedded_input_label)
+        g_loss_rec = self.hyperparams.l_rec * torch.mean(
+            torch.abs(input_image - reconstructed_image)
+        )
+
+        total = g_loss_fake + g_loss_rec
+
+        return CCStarGANGeneratorLoss(total, g_loss_fake, g_loss_rec,)
 
 
 class CCFPGAN(FPGAN):
