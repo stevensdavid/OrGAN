@@ -1,0 +1,10 @@
+class: data.fashion_mnist.HSVFashionMNIST
+kwargs:
+  root: /storage/data/FashionMNIST
+  train: true
+  download: true
+  n_clusters: 20
+  noisy_labels: false
+  cyclical: false
+  min_hue: 0.0
+  max_hue: 0.5 # only use half of hue range to avoid cycle
