@@ -3,12 +3,13 @@ Fixed-Point GAN adapted from Siddiquee et al. (2019) with additions from Ding et
 (2020)
 """
 from dataclasses import dataclass
+from multiprocessing import Value
 from typing import Optional, Tuple, Union
 
 import torch
 from torch import Tensor, nn
 from torch.cuda.amp import autocast
-from torchvision.models import resnet18
+from torchvision.models import resnet18, resnet34, resnet50, resnet101, resnet152
 from util.dataclasses import DataclassExtensions, DataShape
 from util.pytorch_utils import ConditionalInstanceNorm2d, conv2d_output_size
 
@@ -87,22 +88,31 @@ class ConvLabelClassifier(nn.Module):
                 f"Unsupported ResNet size: {resnet_size}.\n"
                 + "Valid sizes are: 18, 34, 50, 101, 152"
             )
-        self.t1 = resnet(pretrained=False)
+        self.resnet = resnet(pretrained=False)
         # Remove final FC layer, add FC to reach embedding dim
-        old_fc = self.t1.fc
-        self.t1.fc = nn.Linear(old_fc.in_features, embedding_dim)
-        # Final FC is separate to allow feature extraction
-        self.t2 = nn.Linear(embedding_dim, n_labels)
+        old_fc = self.resnet.fc
+        linear_dim = 512
+        self.linear_layers = nn.Sequential(
+            nn.Linear(old_fc.in_features, linear_dim),
+            nn.BatchNorm1d(linear_dim, linear_dim),
+            nn.ReLU(),
+            nn.Linear(linear_dim, embedding_dim),
+            nn.BatchNorm1d(embedding_dim, embedding_dim),
+            nn.ReLU(),
+        )
+        self.output_layer = nn.Linear(embedding_dim, n_labels)
 
     @autocast()
     def forward(self, x: Tensor) -> Tensor:
-        h = self.t1(x)
-        y = self.t2(h)
+        h = self.resnet(x)
+        h = self.linear_layers(h)
+        y = self.output_layer(h)
         return y
 
     @autocast()
     def extract_features(self, x: Tensor) -> Tensor:
-        return self.t1(x)
+        h = self.resnet(x)
+        return self.linear_layers(h)
 
 
 class CCGenerator(patchgan.Generator):
@@ -184,7 +194,7 @@ class CCStarGAN(StarGAN):
         l_grad_penalty: float,
         l_mse: Optional[float] = None,  # Only needed if not ccgan_discriminator
         embed_discriminator: bool = False,
-        **kwargs
+        **kwargs,
     ):
         super().__init__(
             data_shape,
@@ -196,7 +206,7 @@ class CCStarGAN(StarGAN):
             l_mse,
             l_rec,
             l_grad_penalty,
-            **kwargs
+            **kwargs,
         )
         self.generator = CCGenerator(data_shape, g_conv_dim, g_num_bottleneck)
         self.ccgan_discriminator = embed_discriminator
@@ -218,7 +228,6 @@ class CCStarGAN(StarGAN):
                 input_image, input_label, embedded_target_label, sample_weights
             )
         raise NotImplementedError()
-
 
     def generator_loss(
         self,
@@ -254,7 +263,7 @@ class CCFPGAN(FPGAN):
         l_grad_penalty: float,
         l_mse: Optional[float] = None,  # Only needed if not ccgan_discriminator
         embed_discriminator: bool = False,
-        **kwargs
+        **kwargs,
     ):
         super().__init__(
             data_shape,
@@ -267,7 +276,7 @@ class CCFPGAN(FPGAN):
             l_rec,
             l_id,
             l_grad_penalty,
-            **kwargs
+            **kwargs,
         )
         self.generator = CCGenerator(data_shape, g_conv_dim, g_num_bottleneck)
         self.ccgan_discriminator = embed_discriminator
