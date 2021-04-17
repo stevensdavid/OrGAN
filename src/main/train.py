@@ -256,24 +256,20 @@ def train(gpu: int, args: Namespace, train_conf: TrainingConfig):
         model.module.set_train()
         for samples, labels in iter(train_data):
             if args.ccgan_wrapper:
-                target_labels, labels, sample_weights, target_weights = (
+                target_labels, labels, sample_weights = (
                     labels["target_labels"],
                     labels["labels"],
                     labels["label_weights"],
-                    labels["target_weights"],
                 )
+                target_weights = torch.ones(args.batch_size) # TODO: remove this maybe
             else:
                 sample_weights = torch.ones(args.batch_size)
                 target_weights = torch.ones(args.batch_size)
                 target_labels = train_dataset.random_targets(labels.shape)
             if hyperparams.get("label_noise_variance", None) is not None:
-                labels = (
-                    labels
-                    + torch.normal(
-                        mean=torch.zeros_like(labels),
-                        std=torch.ones_like(labels)
-                        * hyperparams["label_noise_variance"],
-                    )
+                labels = labels + torch.normal(
+                    mean=torch.zeros_like(labels),
+                    std=torch.ones_like(labels) * hyperparams["label_noise_variance"],
                 )
                 if args.cyclical:
                     labels %= 1
@@ -286,13 +282,13 @@ def train(gpu: int, args: Namespace, train_conf: TrainingConfig):
             sample_weights = sample_weights.to(device, non_blocking=True)
             target_labels = target_labels.to(device, non_blocking=True)
             embedded_target_labels = generator_labels(target_labels)
-            labels = discriminator_labels(labels)
+            input_labels = discriminator_labels(labels)
 
             discriminator_opt.zero_grad()
             with autocast():
                 discriminator_loss = model.module.discriminator_loss(
                     samples,
-                    labels,
+                    input_labels,
                     embedded_target_labels,
                     sample_weights,
                     target_weights,
@@ -313,7 +309,7 @@ def train(gpu: int, args: Namespace, train_conf: TrainingConfig):
                 with autocast():
                     generator_loss = model.module.generator_loss(
                         samples,
-                        labels,
+                        input_labels,
                         embedded_labels,
                         target_labels,
                         embedded_target_labels,
