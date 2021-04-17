@@ -1,12 +1,10 @@
-from multiprocessing import Value
-from typing import Any, Callable, List, Optional, Tuple
+from typing import Callable, List, Optional, Tuple
 
 import numpy as np
 import skimage.color
 import torch
 from torch import nn
 from torchvision.datasets import FashionMNIST
-from torchvision.transforms import CenterCrop
 from util.dataclasses import DataShape
 from util.enums import DataSplit
 
@@ -25,6 +23,9 @@ class HSVFashionMNIST(FashionMNIST, AbstractDataset):
         n_clusters: Optional[int] = None,
         noisy_labels: bool = True,
         fixed_labels: bool = True,
+        min_hue: float = 0.0,
+        max_hue: float = 1.0,
+        cyclical: bool = True,
     ) -> None:
         super().__init__(
             root,
@@ -36,6 +37,9 @@ class HSVFashionMNIST(FashionMNIST, AbstractDataset):
         self.mode = DataSplit.TRAIN if train else DataSplit.TEST
         self.simplified = simplified
         self.fixed_labels = fixed_labels
+        self.min_hue = min_hue
+        self.max_hue = max_hue
+        self.cyclical = cyclical
         # FashionMNIST is split into train and test.
         # Create validation split if we are training
         total_samples = super().__len__()
@@ -47,19 +51,22 @@ class HSVFashionMNIST(FashionMNIST, AbstractDataset):
         self.n_clusters = n_clusters
         self.noisy_labels = noisy_labels
         if n_clusters is None:
-            self.hues = np.random.rand(total_samples)
+            self.hues = np.random.uniform(self.min_hue, self.max_hue, total_samples)
             self.ys = self.hues
             if noisy_labels:
                 self.ys += np.random.normal(size=self.ys.shape, scale=1e-2)
-                self.ys %= 1
+                if cyclical:
+                    self.ys %= 1
         else:
-            ys = np.linspace(0, 1, num=n_clusters, endpoint=False)
+            ys = np.linspace(self.min_hue, self.max_hue, num=n_clusters, endpoint=False)
             ys = np.repeat(ys, total_samples // len(ys))
             np.random.shuffle(ys)
             self.ys = ys
-            self.hues = (
-                ys + np.random.normal(size=ys.shape, scale=1 / (n_clusters * 10))
-            ) % 1
+            self.hues = ys + np.random.normal(
+                size=ys.shape, scale=(self.max_hue - self.min_hue) / (n_clusters * 10)
+            )
+            if self.cyclical:
+                self.hues %= 1
         self.pad = nn.ZeroPad2d(2)
 
     def _getitem(self, index):
@@ -81,7 +88,7 @@ class HSVFashionMNIST(FashionMNIST, AbstractDataset):
                 y = self.ys[idx]
                 hue = self.hues[idx]
             else:
-                y = np.random.rand()
+                y = np.random.uniform(self.min_hue, self.max_hue)
                 hue = y
                 if self.noisy_labels:
                     raise ValueError("Noisy labels not supported without fixed labels.")
@@ -108,7 +115,7 @@ class HSVFashionMNIST(FashionMNIST, AbstractDataset):
             return torch.tensor(
                 np.random.choice(self.ys, size=shape), dtype=torch.float32
             )
-        return torch.rand(shape)
+        return (self.max_hue - self.min_hue) * torch.rand(shape) + self.min_hue
 
     def data_shape(self) -> DataShape:
         x, y = self[0]
