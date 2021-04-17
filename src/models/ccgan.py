@@ -69,7 +69,7 @@ class LabelEmbedding(nn.Module):
 
 class ConvLabelClassifier(nn.Module):
     def __init__(
-        self, embedding_dim: int = 128, n_labels: int = 1, resnet_size: int = 18,
+        self, embedding_dim: int = 128, n_labels: int = 1, resnet_size: int = 34,
     ):
         super().__init__()
         if resnet_size == 18:
