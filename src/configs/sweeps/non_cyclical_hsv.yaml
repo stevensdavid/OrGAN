@@ -1,0 +1,29 @@
+program: main.train
+command:
+  - ${env}
+  - python
+  - "-m"
+  - ${program}
+  - "--args_file"
+  - "configs/sweeps/args/hsv_stargan.yaml"
+  - "--log_hyperparams"
+method: bayes
+early_terminate:
+  type: hyperband
+  min_iter: 50
+metric:
+  name: val_mae
+  goal: minimize
+parameters:
+  l_mse:
+    min: -1.0
+    max: 1.0
+  l_rec:
+    min: -1.0
+    max: 1.0
+  l_grad_penalty:
+    min: -1.0
+    max: 1.0
+  label_noise_variance:
+    min: -3.0
+    max: -1.0

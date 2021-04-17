@@ -1,0 +1,16 @@
+epochs: 300000
+batch_size: 400
+data_config: configs/datasets/non_cyclical_hsv.yaml
+checkpoint_dir: /storage/checkpoints
+experiment_name: Non_Cyclical_HSV_StarGAN
+train_config: "configs/training.yaml"
+model: models.ccgan.CCStarGAN
+model_hyperparams: configs/models/stargan.yaml
+n_nodes: 1
+n_gpus: 4
+n_workers: 5
+node_rank: 0
+ccgan: True
+ccgan_vicinity_type: soft
+ccgan_embedding_file: /storage/embeddings/non_cyclical_hsv/embedding.pt
+ccgan_embedding_dim: 128
