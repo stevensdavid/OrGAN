@@ -16,14 +16,18 @@ metric:
   goal: minimize
 parameters:
   l_mse:
+    distribution: uniform
     min: -1.0
     max: 1.0
   l_rec:
+    distribution: uniform
     min: -1.0
     max: 1.0
   l_grad_penalty:
+    distribution: uniform
     min: -1.0
     max: 1.0
   label_noise_variance:
+    distribution: uniform
     min: -3.0
     max: -1.0
