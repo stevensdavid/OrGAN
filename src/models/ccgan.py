@@ -92,7 +92,7 @@ class ConvLabelClassifier(nn.Module):
         # Remove final FC layer, add FC to reach embedding dim
         old_fc = self.resnet.fc
         linear_dim = 512
-        self.linear_layers = nn.Sequential(
+        linear_layers = nn.Sequential(
             nn.Linear(old_fc.in_features, linear_dim),
             nn.BatchNorm1d(linear_dim, linear_dim),
             nn.ReLU(),
@@ -100,19 +100,18 @@ class ConvLabelClassifier(nn.Module):
             nn.BatchNorm1d(embedding_dim, embedding_dim),
             nn.ReLU(),
         )
+        self.resnet.fc = linear_layers
         self.output_layer = nn.Linear(embedding_dim, n_labels)
 
     @autocast()
     def forward(self, x: Tensor) -> Tensor:
         h = self.resnet(x)
-        h = self.linear_layers(h)
         y = self.output_layer(h)
         return y
 
     @autocast()
     def extract_features(self, x: Tensor) -> Tensor:
-        h = self.resnet(x)
-        return self.linear_layers(h)
+        return self.resnet(x)
 
 
 class CCGenerator(patchgan.Generator):
