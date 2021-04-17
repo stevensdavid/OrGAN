@@ -80,9 +80,10 @@ def parse_args() -> Tuple[Namespace, dict]:
             {k[2:]: v for k, v in zip(unknown[::2], unknown[1::2])} if unknown else None
         )
         for k, v in hyperparam_args.items():
+            str_v = v
             try:
                 v = float(v)
-                if v.is_integer():
+                if v.is_integer() and "." not in str_v:
                     v = int(v)
             except ValueError:
                 pass
