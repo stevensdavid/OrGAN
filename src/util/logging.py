@@ -1,13 +1,10 @@
-import json
 from collections import defaultdict
 from dataclasses import asdict
 from os.path import join
-from pydoc import locate
 
 import numpy as np
+import torch
 import wandb
-
-from util.object_loader import qualified_type_name
 
 
 def add_key_prefix(dictionary: dict, prefix: str, separator: str = "/") -> dict:
@@ -70,27 +67,19 @@ class Logger:
         wandb.finish()
 
     def save(self, checkpoint_dir: str):
-        with open(join(checkpoint_dir, "loss_logger.json"), "w") as f:
-            json.dump(
-                {
-                    "generator_loss": asdict(self.generator_loss),
-                    "discriminator_loss": asdict(self.discriminator_loss),
-                    "steps": self.steps,
-                    "generator_loss_type": qualified_type_name(self.generator_loss),
-                    "discriminator_loss_type": qualified_type_name(
-                        self.discriminator_loss
-                    ),
-                },
-                f,
-            )
+        path = join(checkpoint_dir, "loss_logger.json")
+        state = {
+            "generator_loss": self.generator_loss,
+            "discriminator_loss": self.discriminator_loss,
+            "steps": self.steps,
+            "summary": self.summary,
+        }
+        torch.save(state, path)
 
     def restore(self, checkpoint_dir: str):
-        with open(join(checkpoint_dir, "loss_logger.json"), "r") as f:
-            checkpoint = json.load(f)
-        self.generator_loss = locate(checkpoint["generator_loss_type"])(
-            **checkpoint["generator_loss"]
-        )
-        self.discriminator_loss = locate(checkpoint["discriminator_loss_type"])(
-            **checkpoint["discriminator_loss"]
-        )
+        path = join(checkpoint_dir, "loss_logger.json")
+        checkpoint = torch.load(path)
+        self.generator_loss = checkpoint["generator_loss"]
+        self.discriminator_loss = checkpoint["discriminator_loss"]
         self.steps = checkpoint["steps"]
+        self.summary = checkpoint["summary"]
