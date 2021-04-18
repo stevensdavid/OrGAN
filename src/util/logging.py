@@ -11,13 +11,17 @@ def add_key_prefix(dictionary: dict, prefix: str, separator: str = "/") -> dict:
     return {f"{prefix}{separator}{k}": v for k, v in dictionary.items()}
 
 
+def summary_default():
+    return -np.inf
+
+
 class Logger:
     def __init__(self, log_frequency: int) -> None:
         self.config = wandb.config
         self.steps = 0
         self.discriminator_loss = 0
         self.generator_loss = 0
-        self.summary = defaultdict(lambda: -np.inf)
+        self.summary = defaultdict(summary_default)
         self.log_frequency = log_frequency
 
     def track_loss(self, generator_loss, discriminator_loss):
