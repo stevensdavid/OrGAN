@@ -67,8 +67,13 @@ class AbstractI2I(ABC):
             self._make_save_filename(iteration, checkpoint_dir),
         )
 
-    def load_checkpoint(self, iteration: int, checkpoint_dir: str) -> None:
-        checkpoint = torch.load(self._make_save_filename(iteration, checkpoint_dir))
+    def load_checkpoint(
+        self, iteration: int, checkpoint_dir: str, map_location
+    ) -> None:
+        checkpoint = torch.load(
+            self._make_save_filename(iteration, checkpoint_dir),
+            map_location=map_location,
+        )
         self.generator.load_state_dict(checkpoint["G"])
         self.discriminator.load_state_dict(checkpoint["D"])
 

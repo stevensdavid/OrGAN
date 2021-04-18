@@ -1,5 +1,6 @@
 import json
 import os
+import tempfile
 from argparse import ArgumentParser, Namespace
 from datetime import timedelta
 from os import path
@@ -141,9 +142,11 @@ def train(gpu: int, args: Namespace, train_conf: TrainingConfig):
             datastore.set("hyperparams", json.dumps(hyperparams))
         dist.barrier()
         hyperparams = json.loads(datastore.get("hyperparams"))
+        map_location = {"cuda:%d" % 0: "cuda:%d" % rank}
     else:
         hyperparams = get_wandb_hyperparams(args)
         rank = 0
+        map_location = "cuda"
     if use_ddp:
         torch.cuda.set_device(gpu)
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
@@ -171,7 +174,9 @@ def train(gpu: int, args: Namespace, train_conf: TrainingConfig):
         train_dataset.set_mode(DataSplit.TRAIN)
     if args.ccgan:
         embedding = LabelEmbedding(args.ccgan_embedding_dim, n_labels=data_shape.y_dim)
-        embedding.load_state_dict(torch.load(args.ccgan_embedding_file)())
+        embedding.load_state_dict(
+            torch.load(args.ccgan_embedding_file, map_location=map_location)()
+        )
         embedding.to(device)
         embedding.eval()
         if use_ddp:
@@ -185,6 +190,12 @@ def train(gpu: int, args: Namespace, train_conf: TrainingConfig):
         data_shape=data_shape, device=device, **hyperparams
     )
     if use_ddp:
+        temp_dir = tempfile.gettempdir()
+        # Ensure same initialization across nodes
+        if rank == 0:
+            model.save_checkpoint(0, temp_dir)
+        dist.barrier()
+        model.load_checkpoint(0, temp_dir, map_location)
         train_sampler = torch.utils.data.distributed.DistributedSampler(
             train_dataset, num_replicas=args.world_size, rank=rank
         )
@@ -225,7 +236,7 @@ def train(gpu: int, args: Namespace, train_conf: TrainingConfig):
         opt_state = torch.load(optimizer_file)
         generator_opt.load_state_dict(opt_state["g_opt"])
         discriminator_opt.load_state_dict(opt_state["d_opt"])
-        model.load_checkpoint(args.resume_from, checkpoint_dir)
+        model.load_checkpoint(args.resume_from, checkpoint_dir, map_location)
 
     checkpoint_frequency = train_conf.checkpoint_frequency * (
         1
@@ -261,7 +272,7 @@ def train(gpu: int, args: Namespace, train_conf: TrainingConfig):
                     labels["labels"],
                     labels["label_weights"],
                 )
-                target_weights = torch.ones(args.batch_size) # TODO: remove this maybe
+                target_weights = torch.ones(args.batch_size)  # TODO: remove this maybe
             else:
                 sample_weights = torch.ones(args.batch_size)
                 target_weights = torch.ones(args.batch_size)
