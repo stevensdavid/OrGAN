@@ -163,8 +163,8 @@ class HSVFashionMNIST(FashionMNIST, AbstractDataset):
         x = self.normalize(x)
         return x
 
-    def ground_truths(self, xs: List[np.ndarray], ys: List[float]) -> List[np.ndarray]:
-        return [self.ground_truth(x, y) for x, y in zip(xs, ys)]
+    def ground_truths(self, xs: List[np.ndarray], ys: List[float]) -> np.ndarray:
+        return np.asarray([self.ground_truth(x, y) for x, y in zip(xs, ys)])
 
     def normalize(self, x: np.ndarray) -> np.ndarray:
         """Scale from [0,1] to [-1,1]
