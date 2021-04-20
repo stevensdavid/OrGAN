@@ -93,6 +93,8 @@ class HSVFashionMNIST(FashionMNIST, AbstractDataset):
                 if self.noisy_labels:
                     raise ValueError("Noisy labels not supported without fixed labels.")
         x = self.shift_hue(x, hue)
+        # Scale to [-1,1]
+        x = self.normalize(x)
         x = torch.tensor(x, dtype=torch.float32)
         y = torch.tensor([y], dtype=torch.float32)
         x = self.pad(x)  # Zero-pads 28x28 to 32x32
@@ -145,22 +147,46 @@ class HSVFashionMNIST(FashionMNIST, AbstractDataset):
         x = np.moveaxis(x, -1, 0)  # Move channels to front
         return x
 
-    @staticmethod
-    def ground_truth(x: np.ndarray, y: float) -> np.ndarray:
+    def ground_truth(self, x: np.ndarray, y: float) -> np.ndarray:
         if x.shape[0] != 3:
             raise AssertionError(f"Incorrect shape in ground_truth: {x.shape}")
         if isinstance(x, torch.Tensor):
             x = x.numpy()
+        # Scale to [0,1]
+        x = self.denormalize(x)
         x = np.moveaxis(x, 0, -1)
         x = skimage.color.rgb2hsv(x)
         x[:, :, 0] = y
         x = skimage.color.hsv2rgb(x)
         x = np.moveaxis(x, -1, 0)
+        # Scale back to [-1, 1]
+        x = self.normalize(x)
         return x
 
-    @staticmethod
-    def ground_truths(xs: List[np.ndarray], ys: List[float]) -> List[np.ndarray]:
-        return [HSVFashionMNIST.ground_truth(x, y) for x, y in zip(xs, ys)]
+    def ground_truths(self, xs: List[np.ndarray], ys: List[float]) -> List[np.ndarray]:
+        return [self.ground_truth(x, y) for x, y in zip(xs, ys)]
+
+    def normalize(x: np.ndarray) -> np.ndarray:
+        """Scale from [0,1] to [-1,1]
+
+        Args:
+            x (np.ndarray): Image with values in range [0,1]
+
+        Returns:
+            np.ndarray: Image with values in range [-1,1]
+        """
+        return 2 * x - 1
+
+    def denormalize(x: np.ndarray) -> np.ndarray:
+        """Scale from [-1,1] to [0,1]
+
+        Args:
+            x (np.ndarray): Image with values in range [-1,1]
+
+        Returns:
+            np.ndarray: Image with values in range [0,1]
+        """
+        return (x + 1) / 2
 
 
 if __name__ == "__main__":
