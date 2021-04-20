@@ -388,9 +388,9 @@ def train(gpu: int, args: Namespace, train_conf: TrainingConfig):
         # Log the last batch of images
         if rank == 0:
             log_fakes = val_dataset.denormalize(generated[:10].cpu())
-            log_inputs = val_dataset.denormalize(samples[:10].cpu())
-            log_truths = val_dataset.denormalize(ground_truth[:10].cpu())
-            log_labels = target_labels[:10].cpu()
+            log_inputs = val_dataset.denormalize(samples[:10])
+            log_truths = val_dataset.denormalize(ground_truth[:10])
+            log_labels = target_labels[:10]
             loss_logger.track_images(log_inputs, log_fakes, log_truths, log_labels)
             loss_logger.track_summary_metric("val_norm", val_norm)
             loss_logger.track_summary_metric("val_mae", val_mae)
