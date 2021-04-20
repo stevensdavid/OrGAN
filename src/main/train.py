@@ -387,10 +387,11 @@ def train(gpu: int, args: Namespace, train_conf: TrainingConfig):
         val_mae = total_mae / (len(val_dataset) * n_attempts)
         # Log the last batch of images
         if rank == 0:
-            generated_examples = generated[:10].cpu()
-            loss_logger.track_images(
-                samples[:10], generated_examples, ground_truth[:10], target_labels[:10]
-            )
+            log_fakes = val_dataset.denormalize(generated[:10].cpu())
+            log_inputs = val_dataset.denormalize(samples[:10].cpu())
+            log_truths = val_dataset.denormalize(ground_truth[:10].cpu())
+            log_labels = target_labels[:10].cpu()
+            loss_logger.track_images(log_inputs, log_fakes, log_truths, log_labels)
             loss_logger.track_summary_metric("val_norm", val_norm)
             loss_logger.track_summary_metric("val_mae", val_mae)
             loss_logger.track_summary_metric("epoch", epoch)
