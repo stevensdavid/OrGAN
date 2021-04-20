@@ -166,7 +166,7 @@ class HSVFashionMNIST(FashionMNIST, AbstractDataset):
     def ground_truths(self, xs: List[np.ndarray], ys: List[float]) -> List[np.ndarray]:
         return [self.ground_truth(x, y) for x, y in zip(xs, ys)]
 
-    def normalize(x: np.ndarray) -> np.ndarray:
+    def normalize(self, x: np.ndarray) -> np.ndarray:
         """Scale from [0,1] to [-1,1]
 
         Args:
@@ -177,7 +177,7 @@ class HSVFashionMNIST(FashionMNIST, AbstractDataset):
         """
         return 2 * x - 1
 
-    def denormalize(x: np.ndarray) -> np.ndarray:
+    def denormalize(self, x: np.ndarray) -> np.ndarray:
         """Scale from [-1,1] to [0,1]
 
         Args:
