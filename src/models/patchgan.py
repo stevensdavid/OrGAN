@@ -26,7 +26,6 @@ class Generator(AbstractGenerator):
                 dim, affine=True, track_running_stats=True
             )
 
-        relu = lambda: nn.ReLU(inplace=True)
         input_channels = (
             data_shape.n_channels
             if conditional_norm
@@ -42,7 +41,7 @@ class Generator(AbstractGenerator):
                 bias=False,
             ),
             instance_norm(conv_dim),
-            relu(),
+            nn.PReLU(),
         ]
 
         current_dim = conv_dim
@@ -58,7 +57,7 @@ class Generator(AbstractGenerator):
                     bias=False,
                 ),
                 instance_norm(2 * current_dim),
-                relu(),
+                nn.PReLU(),
             ]
             current_dim *= 2
         # Bottleneck
@@ -78,7 +77,7 @@ class Generator(AbstractGenerator):
                     bias=False,
                 ),
                 instance_norm(current_dim // 2),
-                relu(),
+                nn.PReLU(),
             ]
             current_dim //= 2
 
@@ -113,7 +112,7 @@ class Discriminator(AbstractDiscriminator):
             nn.Conv2d(
                 data_shape.n_channels, conv_dim, kernel_size=4, stride=2, padding=1,
             ),
-            nn.LeakyReLU(0.01),
+            nn.PReLU(),
         ]
         current_dim = conv_dim
         for _ in range(1, num_scales):
@@ -121,7 +120,7 @@ class Discriminator(AbstractDiscriminator):
                 nn.Conv2d(
                     current_dim, 2 * current_dim, kernel_size=4, stride=2, padding=1
                 ),
-                nn.LeakyReLU(0.01),
+                nn.PReLU(),
             ]
             current_dim *= 2
 
@@ -156,7 +155,7 @@ class _ResBlock(nn.Module):
         self.layers = nn.Sequential(
             nn.Conv2d(input_dim, output_dim, **conv_conf),
             nn.InstanceNorm2d(output_dim, **norm_conf),
-            nn.ReLU(inplace=True),
+            nn.PReLU(),
             nn.Conv2d(output_dim, output_dim, **conv_conf),
             nn.InstanceNorm2d(output_dim, **norm_conf),
         )

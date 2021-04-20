@@ -9,7 +9,8 @@ from typing import Optional, Tuple, Union
 import torch
 from torch import Tensor, nn
 from torch.cuda.amp import autocast
-from torchvision.models import resnet18, resnet34, resnet50, resnet101, resnet152
+from torchvision.models import (resnet18, resnet34, resnet50, resnet101,
+                                resnet152)
 from util.dataclasses import DataclassExtensions, DataShape
 from util.pytorch_utils import ConditionalInstanceNorm2d, conv2d_output_size
 
@@ -147,7 +148,7 @@ class CCDiscriminator(nn.Module):
             nn.Conv2d(
                 data_shape.n_channels, conv_dim, kernel_size=4, stride=2, padding=1,
             ),
-            nn.LeakyReLU(0.01),
+            nn.PReLU(),
         ]
         current_image_side = conv2d_output_size(
             data_shape.x_size, kernel_size=4, stride=2, padding=1
@@ -158,7 +159,7 @@ class CCDiscriminator(nn.Module):
                 nn.Conv2d(
                     current_dim, 2 * current_dim, kernel_size=4, stride=2, padding=1
                 ),
-                nn.LeakyReLU(0.01),
+                nn.PReLU(),
             ]
             current_image_side = conv2d_output_size(
                 current_image_side, kernel_size=4, stride=2, padding=1
@@ -176,15 +177,13 @@ class CCDiscriminator(nn.Module):
         self.x_output = nn.utils.spectral_norm(
             nn.Conv2d(current_dim, 1, kernel_size=3, stride=1, padding=1, bias=False)
         )
-        self.sigmoid = nn.Sigmoid()
 
     def forward(self, x: Tensor, y: Tensor) -> Tensor:
         h_x = self.x_input(x)
         h_y = self.y_input(y)
         y_output = torch.sum(h_y * torch.flatten(h_x, start_dim=1), dim=1)
         h = self.x_output(h_x) + y_output.view(-1, 1, 1, 1)
-        image_source = self.sigmoid(h)
-        return image_source
+        return h
 
 
 class CCStarGAN(StarGAN):
