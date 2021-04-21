@@ -94,10 +94,10 @@ class HSVFashionMNIST(FashionMNIST, AbstractDataset):
                     raise ValueError("Noisy labels not supported without fixed labels.")
         x = self.shift_hue(x, hue)
         # Scale to [-1,1]
-        x = self.normalize(x)
         x = torch.tensor(x, dtype=torch.float32)
         y = torch.tensor([y], dtype=torch.float32)
         x = self.pad(x)  # Zero-pads 28x28 to 32x32
+        x = self.normalize(x)
         return x, y
 
     def _len(self) -> int:
