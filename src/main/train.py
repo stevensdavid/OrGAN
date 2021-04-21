@@ -292,15 +292,18 @@ def train(gpu: int, args: Namespace, train_conf: TrainingConfig):
             labels = labels.to(device, non_blocking=True)
             sample_weights = sample_weights.to(device, non_blocking=True)
             target_labels = target_labels.to(device, non_blocking=True)
-            embedded_target_labels = generator_labels(target_labels)
-            input_labels = discriminator_labels(labels)
+            target_weights = target_weights.to(device, non_blocking=True)
+            discriminator_targets = discriminator_labels(target_labels)
+            generator_targets = generator_labels(target_labels)
+            discriminator_input_labels = discriminator_labels(labels)
 
             discriminator_opt.zero_grad()
             with autocast():
                 discriminator_loss = model.module.discriminator_loss(
                     samples,
-                    input_labels,
-                    embedded_target_labels,
+                    discriminator_input_labels,
+                    discriminator_targets,
+                    generator_targets,
                     sample_weights,
                     target_weights,
                 )
@@ -313,17 +316,18 @@ def train(gpu: int, args: Namespace, train_conf: TrainingConfig):
                 if args.cyclical:
                     target_labels = to_cyclical(target_labels)
                 target_labels = target_labels.to(device, non_blocking=True)
-                target_labels = discriminator_labels(target_labels)
-                embedded_labels = generator_labels(labels)
+                discriminator_targets = discriminator_labels(target_labels)
+                generator_targets = generator_labels(target_labels)
+                generator_input_labels = generator_labels(labels)
                 generator_opt.zero_grad()
                 # Update generator less often
                 with autocast():
                     generator_loss = model.module.generator_loss(
                         samples,
-                        input_labels,
-                        embedded_labels,
-                        target_labels,
-                        embedded_target_labels,
+                        discriminator_input_labels,
+                        generator_input_labels,
+                        discriminator_targets,
+                        generator_targets,
                         sample_weights,
                     )
                 g_scaler.scale(generator_loss.total).backward()
