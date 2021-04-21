@@ -22,9 +22,8 @@ from models.stargan import StarGAN
 @dataclass
 class CCDiscriminatorLoss(DataclassExtensions):
     total: Tensor
-    classification_real: Tensor
-    classification_fake: Tensor
-    gradient_penalty: Tensor
+    relative_real: Tensor
+    relative_fake: Tensor
 
 
 @dataclass
@@ -40,7 +39,8 @@ class CCGeneratorLoss(DataclassExtensions):
 @dataclass
 class CCStarGANGeneratorLoss(DataclassExtensions):
     total: Tensor
-    classification_fake: Tensor
+    relative_real: Tensor
+    relative_fake: Tensor
     reconstruction: Tensor
 
 
@@ -196,7 +196,7 @@ class CCStarGAN(StarGAN):
         d_conv_dim: int,
         d_num_scales: int,
         l_rec: float,
-        l_grad_penalty: float,
+        l_grad_penalty: Optional[float] = None,  # needed if not ccgan_discriminator
         l_mse: Optional[float] = None,  # Only needed if not ccgan_discriminator
         embed_discriminator: bool = False,
         **kwargs,
@@ -219,62 +219,38 @@ class CCStarGAN(StarGAN):
             self.discriminator = CCDiscriminator(data_shape, d_conv_dim, d_num_scales)
         elif l_mse is None:
             raise TypeError("Missing mandatory hyperparameter for PatchGAN disc: l_mse")
+        self.bce = nn.BCEWithLogitsLoss(reduction="none")
 
     def discriminator_loss(
         self,
         input_image: Tensor,
         input_label: Tensor,
-        embedded_target_label: Tensor,
+        target_labels: Tensor,
+        generator_target_label: Tensor,
         sample_weights: Tensor,
         target_weights: Tensor,
     ) -> Union[CCDiscriminatorLoss, DiscriminatorLoss]:
-        if not self.ccgan_discriminator:
-            return super().discriminator_loss(
-                input_image, input_label, embedded_target_label, sample_weights
-            )
-        # CCDiscriminator doesn't output class, so we don't need label losses
-
         sample_weights = sample_weights.view(-1, 1, 1, 1)
-        # Discriminator losses with real images
-        sources = self.discriminator(input_image, input_label)
-        classification_real = -torch.mean(
-            sample_weights * sources
-        )  # Should be 0 (real) for all
-        # Discriminator losses with fake images
-        fake_image = self.generator.transform(input_image, embedded_target_label).detach()
-        sources = self.discriminator(fake_image, embedded_target_label)
-        target_weights = sample_weights.view(-1, 1, 1, 1)
-        classification_fake = torch.mean(
-            target_weights * sources
-        )  # Should be 1 (fake) for all
-        # Gradient penalty loss
-        alpha = torch.rand(input_image.size(0), 1, 1, 1).to(self.device)
-        # Blend real and fake image randomly
-        x_hat = (
-            alpha * input_image.data + (1 - alpha) * fake_image.data
-        ).requires_grad_(True)
-        alpha = alpha.view(-1, 1)
-        y_hat = (
-            alpha * input_label + (1 - alpha) * embedded_target_label
-        ).requires_grad_(True)
-        grad_sources = self.discriminator(x_hat, y_hat)
-        weight = torch.ones(grad_sources.size(), device=self.device)
-        gradient = torch.autograd.grad(
-            outputs=grad_sources,
-            inputs=[x_hat, y_hat],
-            grad_outputs=weight,
-            retain_graph=True,
-            create_graph=True,
-            only_inputs=True,
-        )[0]
-        gradient = gradient.view(gradient.size(0), -1)
-        gradient_norm = torch.sqrt(torch.sum(gradient ** 2, dim=1))
-        gradient_penalty = torch.mean((gradient_norm - 1) ** 2)
-        gradient_penalty *= self.hyperparams.l_grad_penalty
+        target_weights = target_weights.view(-1, 1, 1, 1)
+        real_sources = self.discriminator(input_image, input_label)
+        fake_images = self.generator.transform(
+            input_image, generator_target_label
+        ).detach()
+        fake_sources = self.discriminator(fake_images, target_labels)
+        average_real = torch.mean(real_sources)
+        average_fake = torch.mean(fake_sources)
+        real_loss = torch.mean(
+            sample_weights
+            * self.bce(real_sources - average_fake, torch.ones_like(real_sources))
+        )
+        fake_loss = torch.mean(
+            target_weights
+            * self.bce(fake_sources - average_real, torch.zeros_like(fake_sources))
+        )
+        total_loss = (real_loss + fake_loss) / 2
 
-        total = classification_real + classification_fake + gradient_penalty
         return CCDiscriminatorLoss(
-            total, classification_real, classification_fake, gradient_penalty,
+            total=total_loss, relative_real=real_loss, relative_fake=fake_loss
         )
 
     def generator_loss(
@@ -294,10 +270,20 @@ class CCStarGAN(StarGAN):
                 target_label,
                 embedded_target_label,
             )
+        sample_weights = sample_weights.view(-1, 1, 1, 1)
         # Input to target
         fake_image = self.generator.transform(input_image, embedded_target_label)
-        sources = self.discriminator(fake_image, embedded_target_label)
-        g_loss_fake = -torch.mean(torch.mean(sources, dim=1))
+        fake_sources = self.discriminator(fake_image, target_label)
+        real_sources = self.discriminator(input_image, input_label)
+        average_real = torch.mean(real_sources)
+        average_fake = torch.mean(fake_sources)
+        real_loss = torch.mean(
+            sample_weights
+            * self.bce(real_sources - average_fake, torch.zeros_like(real_sources))
+        )
+        fake_loss = torch.mean(
+            self.bce(fake_sources - average_real, torch.ones_like(fake_sources))
+        )
 
         # Target to input
         reconstructed_image = self.generator.transform(fake_image, embedded_input_label)
@@ -305,9 +291,13 @@ class CCStarGAN(StarGAN):
             torch.abs(input_image - reconstructed_image)
         )
 
-        total = g_loss_fake + g_loss_rec
-
-        return CCStarGANGeneratorLoss(total, g_loss_fake, g_loss_rec,)
+        total = (real_loss + fake_loss) / 2 + g_loss_rec
+        return CCStarGANGeneratorLoss(
+            total=total,
+            relative_real=real_loss,
+            relative_fake=fake_loss,
+            reconstruction=g_loss_rec,
+        )
 
 
 class CCFPGAN(FPGAN):

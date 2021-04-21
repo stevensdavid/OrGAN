@@ -19,10 +19,6 @@ parameters:
     distribution: uniform
     min: -1.0
     max: 1.0
-  l_grad_penalty:
-    distribution: uniform
-    min: -1.0
-    max: 1.0
   ccgan_sigma:
     distribution: uniform
     min: -3.0

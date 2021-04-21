@@ -20,9 +20,6 @@ parameters:
   l_rec:
     min: 0.1
     max: 10
-  l_grad_penalty:
-    min: 0.1
-    max: 10
   label_noise_variance:
     min: 0.001
     max: 0.05
