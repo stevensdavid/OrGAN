@@ -102,7 +102,9 @@ class FPGAN(nn.Module, AbstractI2I):
             sample_weights * self.square_error(labels, input_label)
         )
         # Discriminator losses with fake images
-        fake_image = self.generator.transform(input_image, embedded_target_label)
+        fake_image = self.generator.transform(
+            input_image, embedded_target_label
+        ).detach()
         sources, _ = self.discriminator(fake_image)
         classification_fake = torch.mean(sources)  # Should be 1 (fake) for all
         # Gradient penalty loss

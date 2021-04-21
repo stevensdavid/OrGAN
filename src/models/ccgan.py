@@ -9,7 +9,8 @@ from typing import Optional, Tuple, Union
 import torch
 from torch import Tensor, nn
 from torch.cuda.amp import autocast
-from torchvision.models import resnet18, resnet34, resnet50, resnet101, resnet152
+from torchvision.models import (resnet18, resnet34, resnet50, resnet101,
+                                resnet152)
 from util.dataclasses import DataclassExtensions, DataShape
 from util.pytorch_utils import ConditionalInstanceNorm2d, conv2d_output_size
 
@@ -240,7 +241,7 @@ class CCStarGAN(StarGAN):
             sample_weights * sources
         )  # Should be 0 (real) for all
         # Discriminator losses with fake images
-        fake_image = self.generator.transform(input_image, embedded_target_label)
+        fake_image = self.generator.transform(input_image, embedded_target_label).detach()
         sources = self.discriminator(fake_image, embedded_target_label)
         target_weights = sample_weights.view(-1, 1, 1, 1)
         classification_fake = torch.mean(
