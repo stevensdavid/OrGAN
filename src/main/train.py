@@ -220,8 +220,8 @@ def train(gpu: int, args: Namespace, train_conf: TrainingConfig):
         sampler=val_sampler if use_ddp else None,
         worker_init_fn=seed_worker,
     )
-    discriminator_opt = Adam(model.discriminator_params())
-    generator_opt = Adam(model.generator_params())
+    discriminator_opt = Adam(model.discriminator_params(), betas=[0.5, 0.999])
+    generator_opt = Adam(model.generator_params(), betas=[0.5, 0.999])
 
     log_frequency = train_conf.log_frequency * (
         1
