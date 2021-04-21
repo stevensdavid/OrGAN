@@ -11,7 +11,6 @@ n_gpus: 4
 n_workers: 5
 node_rank: 0
 ccgan: True
-ccgan_wrapper: true
 embed_discriminator: true
 ccgan_vicinity_type: soft
 ccgan_embedding_file: /storage/embeddings/non_cyclical_hsv/embedding.pt
