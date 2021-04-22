@@ -59,7 +59,7 @@ def parse_args() -> Tuple[Namespace, dict]:
         "--n_workers", type=int, default=0, help="Data loading workers. Skipped if DDP."
     )
     parser.add_argument("--cyclical", action="store_true", help="Use cyclical encoding")
-    parser.add_argument("--ccgan", action="store_true")
+    parser.add_argument("--embed_generator", action="store_true")
     parser.add_argument("--ccgan_vicinity_type", type=str, choices=["hard", "soft"])
     parser.add_argument(
         "--ccgan_embedding_file", type=str, help="CcGAN embedding module"
@@ -172,7 +172,7 @@ def train(gpu: int, args: Namespace, train_conf: TrainingConfig):
             n_neighbours=hyperparams["ccgan_n_neighbours"],
         )
         train_dataset.set_mode(DataSplit.TRAIN)
-    if args.ccgan:
+    if args.embed_generator:
         embedding = LabelEmbedding(args.ccgan_embedding_dim, n_labels=data_shape.y_dim)
         embedding.load_state_dict(
             torch.load(args.ccgan_embedding_file, map_location=map_location)()
@@ -257,7 +257,7 @@ def train(gpu: int, args: Namespace, train_conf: TrainingConfig):
 
     def generator_labels(y):
         with torch.no_grad():
-            return embedding(y).detach() if args.ccgan else y
+            return embedding(y).detach() if args.embed_generator else y
 
     def discriminator_labels(y):
         with torch.no_grad():

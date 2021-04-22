@@ -10,7 +10,7 @@ n_nodes: 1
 n_gpus: 4
 n_workers: 5
 node_rank: 0
-ccgan: True
+embed_generator: True
 ccgan_vicinity_type: soft
 ccgan_embedding_file: /storage/embeddings/infinite_cyclical_hsv/embedding.pt
 ccgan_embedding_dim: 128
