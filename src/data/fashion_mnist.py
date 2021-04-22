@@ -7,7 +7,7 @@ import torch
 import torch.linalg
 from torch import nn
 from torchvision.datasets import FashionMNIST
-from util.dataclasses import DataclassExtensions, DataShape
+from util.dataclasses import DataclassExtensions, DataShape, GeneratedExamples
 from util.enums import DataSplit, ReductionType
 
 from data.abstract_classes import AbstractDataset
@@ -246,7 +246,15 @@ class HSVFashionMNIST(FashionMNIST, AbstractDataset):
         return return_values
 
     def stich_examples(self, real_images, real_labels, fake_images, fake_labels):
-        pass
+        def stitch_image(real, fake, target_label):
+            truth = self.ground_truth(real, target_label)
+            merged = np.concatenate((real, fake, truth), axis=2)
+            return np.moveaxis(merged, 0, -1)
+
+        return [
+            GeneratedExamples(stitch_image(real, fake), f"H={target}")
+            for real, fake, target in zip(real_images, fake_images, fake_labels)
+        ]
 
 
 if __name__ == "__main__":
