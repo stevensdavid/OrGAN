@@ -26,8 +26,13 @@ from torch.utils.data import DataLoader
 from tqdm import trange
 from util.cyclical_encoding import to_cyclical
 from util.dataclasses import DataclassExtensions, TrainingConfig
-from util.enums import (DataSplit, FrequencyMetric, MultiGPUType,
-                        ReductionType, VicinityType)
+from util.enums import (
+    DataSplit,
+    FrequencyMetric,
+    MultiGPUType,
+    ReductionType,
+    VicinityType,
+)
 from util.logging import Logger
 from util.object_loader import build_from_yaml, load_yaml
 from util.pytorch_utils import seed_worker, set_seeds
@@ -366,7 +371,7 @@ def train(gpu: int, args: Namespace, train_conf: TrainingConfig):
         if use_ddp:
             dist.barrier()
         model.module.set_eval()
-        n_attempts = 5
+        n_attempts = 1
         total_performance: DataclassExtensions = 0
         with torch.no_grad():
             for samples, real_labels in iter(val_data):
