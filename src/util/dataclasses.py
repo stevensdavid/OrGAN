@@ -4,6 +4,7 @@ from dataclasses import astuple, dataclass, fields
 from operator import add, sub
 from typing import Dict, Union
 
+import torch
 from typing_extensions import Protocol
 
 from util.enums import FrequencyMetric, MultiGPUType
@@ -35,6 +36,12 @@ class DataclassExtensions:
 
     def to_plain_datatypes(self) -> DataclassType:
         return type(self)(*tuple(map(lambda x: x.item(), self.to_tuple())))
+
+    def to_tensor(self) -> torch.Tensor:
+        return torch.stack(self.to_tuple())
+
+    def from_tensor(self, t: torch.Tensor) -> DataclassType:
+        return type(self)(*t)
 
 
 @dataclass
@@ -72,3 +79,19 @@ class TrainingConfig:
             else MultiGPUType.DATA_PARALLEL
         )
         return TrainingConfig(**cfg)
+
+
+if __name__ == "__main__":
+
+    @dataclass
+    class A(DataclassExtensions):
+        x: torch.Tensor
+        y: torch.Tensor
+        z: torch.Tensor
+
+    a = A(torch.tensor([1, 2]), torch.tensor([3, 4]), torch.tensor([5, 6]))
+    t = a.to_tensor()
+    b = a.from_tensor(t)
+    assert torch.equal(b.x, a.x)
+    assert torch.equal(b.y, a.y)
+    assert torch.equal(b.z, a.z)
