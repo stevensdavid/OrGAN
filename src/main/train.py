@@ -274,7 +274,11 @@ def train(gpu: int, args: Namespace, train_conf: TrainingConfig):
     if args.resume_from is not None:
         # TODO: this should load the rank 0 optimizers for all GPUs in DDP, unsure if ok
         load_optimizer_weights(
-            generator_opt, discriminator_opt, args.resume_from, checkpoint_dir
+            generator_opt,
+            discriminator_opt,
+            args.resume_from,
+            checkpoint_dir,
+            map_location,
         )
 
     g_scaler = GradScaler()
