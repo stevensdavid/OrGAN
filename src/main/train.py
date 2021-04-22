@@ -260,7 +260,7 @@ def train(gpu: int, args: Namespace, train_conf: TrainingConfig):
     g_scaler = GradScaler()
     d_scaler = GradScaler()
     step = 0
-    d_updates_per_g_update = hyperparams.get("d_updates_per_g", 5)
+    d_updates_per_g_update = hyperparams.get("d_updates_per_g", 1)
     if rank == 0:
         wandb.watch(model.module)
 
