@@ -164,7 +164,7 @@ class HSVFashionMNIST(FashionMNIST, AbstractDataset):
         if x.shape[0] != 3:
             raise AssertionError(f"Incorrect shape in ground_truth: {x.shape}")
         if isinstance(x, torch.Tensor):
-            x = x.numpy()
+            x = x.cpu().numpy()
         # Scale to [0,1]
         x = self.denormalize(x)
         x = np.moveaxis(x, 0, -1)
@@ -202,11 +202,12 @@ class HSVFashionMNIST(FashionMNIST, AbstractDataset):
         return (x + 1) / 2
 
     def rgb_tensor_to_hsv(self, t: torch.Tensor) -> torch.Tensor:
-        t = self.denormalize(t)
-        t = torch.moveaxis(t, 0, -1)
-        t = skimage.color.rgb2hsv(x)
-        t = torch.moveaxis(t, -1, 0)
-        return t
+        x = t.cpu().numpy()
+        x = self.denormalize(x)
+        x = np.moveaxis(x, 1, -1)
+        x = skimage.color.rgb2hsv(x)
+        x = np.moveaxis(x, -1, 0)
+        return torch.tensor(x, device=t.device)
 
     def performance(
         self,
@@ -217,6 +218,7 @@ class HSVFashionMNIST(FashionMNIST, AbstractDataset):
         reduction: ReductionType,
     ) -> HSVFashionMNISTPerformance:
         ground_truths = self.ground_truths(real_images, fake_labels)
+        ground_truths = torch.tensor(ground_truths, device=fake_images.device)
         rgb_l1 = torch.mean(torch.abs(ground_truths - fake_images), dim=0)
         rgb_l2 = torch.linalg.norm(ground_truths - fake_images, dim=0)
         hsv_truths = self.rgb_tensor_to_hsv(ground_truths)
@@ -252,7 +254,7 @@ class HSVFashionMNIST(FashionMNIST, AbstractDataset):
             return np.moveaxis(merged, 0, -1)
 
         return [
-            GeneratedExamples(stitch_image(real, fake), f"H={target}")
+            GeneratedExamples(stitch_image(real, fake, target), f"H={target}")
             for real, fake, target in zip(real_images, fake_images, fake_labels)
         ]
 
