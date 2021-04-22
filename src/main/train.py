@@ -240,11 +240,12 @@ def train(gpu: int, args: Namespace, train_conf: TrainingConfig):
         sampler=val_sampler if use_ddp else None,
         worker_init_fn=seed_worker,
     )
-    if args.optimizer == "adam":
+    optimizer_arg = hyperparams.get("optimizer", "adam")
+    if optimizer_arg == "adam":
         optimizer = lambda params, lr: optim.Adam(params, lr, betas=[0.5, 0.999])
-    elif args.optimizer == "rmsprop":
+    elif optimizer_arg == "rmsprop":
         optimizer = lambda params, lr: optim.RMSprop(params, lr)
-    elif args.optimizer == "sgd":
+    elif optimizer_arg == "sgd":
         optimizer = lambda params, lr: optim.SGD(params, lr)
 
     log_frequency = train_conf.log_frequency * (
@@ -269,8 +270,10 @@ def train(gpu: int, args: Namespace, train_conf: TrainingConfig):
     else:
         model = nn.DataParallel(model)
 
-    discriminator_opt = optimizer(model.discriminator_params(), args.discriminator_lr)
-    generator_opt = optimizer(model.generator_params(), args.generator_lr)
+    discriminator_opt = optimizer(
+        model.module.discriminator_params(), args.discriminator_lr
+    )
+    generator_opt = optimizer(model.module.generator_params(), args.generator_lr)
     if args.resume_from is not None:
         # TODO: this should load the rank 0 optimizers for all GPUs in DDP, unsure if ok
         load_optimizer_weights(
