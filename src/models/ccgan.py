@@ -9,8 +9,7 @@ from typing import Optional, Tuple, Union
 import torch
 from torch import Tensor, nn
 from torch.cuda.amp import autocast
-from torchvision.models import (resnet18, resnet34, resnet50, resnet101,
-                                resnet152)
+from torchvision.models import resnet18, resnet34, resnet50, resnet101, resnet152
 from util.dataclasses import DataclassExtensions, DataShape
 from util.pytorch_utils import ConditionalInstanceNorm2d, conv2d_output_size
 
@@ -228,10 +227,8 @@ class CCStarGAN(StarGAN):
         target_labels: Tensor,
         generator_target_label: Tensor,
         sample_weights: Tensor,
-        target_weights: Tensor,
     ) -> Union[CCDiscriminatorLoss, DiscriminatorLoss]:
         sample_weights = sample_weights.view(-1, 1, 1, 1)
-        target_weights = target_weights.view(-1, 1, 1, 1)
         real_sources = self.discriminator(input_image, input_label)
         fake_images = self.generator.transform(
             input_image, generator_target_label
@@ -240,13 +237,9 @@ class CCStarGAN(StarGAN):
         average_real = torch.mean(real_sources)
         average_fake = torch.mean(fake_sources)
         real_loss = torch.mean(
-            sample_weights
-            * self.bce(real_sources - average_fake, torch.ones_like(real_sources))
+            sample_weights * ((real_sources - average_fake - 1) ** 2)
         )
-        fake_loss = torch.mean(
-            target_weights
-            * self.bce(fake_sources - average_real, torch.zeros_like(fake_sources))
-        )
+        fake_loss = torch.mean(((fake_sources - average_real + 1) ** 2))
         total_loss = (real_loss + fake_loss) / 2
 
         return CCDiscriminatorLoss(
@@ -278,12 +271,9 @@ class CCStarGAN(StarGAN):
         average_real = torch.mean(real_sources)
         average_fake = torch.mean(fake_sources)
         real_loss = torch.mean(
-            sample_weights
-            * self.bce(real_sources - average_fake, torch.zeros_like(real_sources))
+            sample_weights * ((real_sources - average_fake + 1) ** 2)
         )
-        fake_loss = torch.mean(
-            self.bce(fake_sources - average_real, torch.ones_like(fake_sources))
-        )
+        fake_loss = torch.mean((fake_sources - average_real - 1) ** 2)
 
         # Target to input
         reconstructed_image = self.generator.transform(fake_image, embedded_input_label)
