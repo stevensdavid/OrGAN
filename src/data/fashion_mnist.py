@@ -1,14 +1,27 @@
+from dataclasses import dataclass
 from typing import Callable, List, Optional, Tuple
 
 import numpy as np
 import skimage.color
 import torch
+import torch.linalg
 from torch import nn
 from torchvision.datasets import FashionMNIST
-from util.dataclasses import DataShape
-from util.enums import DataSplit
+from util.dataclasses import DataclassExtensions, DataShape
+from util.enums import DataSplit, ReductionType
 
 from data.abstract_classes import AbstractDataset
+
+
+@dataclass
+class HSVFashionMNISTPerformance(DataclassExtensions):
+    hsv_mae_h: torch.Tensor
+    hsv_mae_s: torch.Tensor
+    hsv_mae_v: torch.Tensor
+    hsv_l1: torch.Tensor
+    hsv_l2: torch.Tensor
+    rgb_l1: torch.Tensor
+    rgb_l2: torch.Tensor
 
 
 class HSVFashionMNIST(FashionMNIST, AbstractDataset):
@@ -187,6 +200,53 @@ class HSVFashionMNIST(FashionMNIST, AbstractDataset):
             np.ndarray: Image with values in range [0,1]
         """
         return (x + 1) / 2
+
+    def rgb_tensor_to_hsv(self, t: torch.Tensor) -> torch.Tensor:
+        t = self.denormalize(t)
+        t = torch.moveaxis(t, 0, -1)
+        t = skimage.color.rgb2hsv(x)
+        t = torch.moveaxis(t, -1, 0)
+        return t
+
+    def performance(
+        self,
+        real_images,
+        real_labels,
+        fake_images,
+        fake_labels,
+        reduction: ReductionType,
+    ) -> HSVFashionMNISTPerformance:
+        ground_truths = self.ground_truths(real_images, fake_labels)
+        rgb_l1 = torch.mean(torch.abs(ground_truths - fake_images), dim=0)
+        rgb_l2 = torch.linalg.norm(ground_truths - fake_images, dim=0)
+        hsv_truths = self.rgb_tensor_to_hsv(ground_truths)
+        hsv_fakes = self.rgb_tensor_to_hsv(fake_images)
+        h_error = torch.mean(
+            torch.abs(hsv_truths[:, 0, :, :] - hsv_fakes[:, 0, :, :]), dim=0
+        )
+        s_error = torch.mean(
+            torch.abs(hsv_truths[:, 1, :, :] - hsv_fakes[:, 1, :, :]), dim=0
+        )
+        v_error = torch.mean(
+            torch.abs(hsv_truths[:, 2, :, :] - hsv_fakes[:, 2, :, :]), dim=0
+        )
+        hsv_l1 = torch.mean(torch.abs(hsv_truths - hsv_fakes), dim=0)
+        hsv_l2 = torch.mean(torch.linalg.norm(hsv_truths - hsv_fakes, dim=0), dim=0)
+
+        return_values = HSVFashionMNISTPerformance(
+            h_error, s_error, v_error, hsv_l1, hsv_l2, rgb_l1, rgb_l2
+        )
+        if reduction is ReductionType.MEAN:
+            reduce = lambda x: torch.mean(x)
+        elif reduction is ReductionType.SUM:
+            reduce = lambda x: torch.sum(x)
+        elif reduction is ReductionType.NONE:
+            reduce = lambda x: x
+        return_values = return_values.map(reduce)
+        return return_values
+
+    def stich_examples(self, real_images, real_labels, fake_images, fake_labels):
+        pass
 
 
 if __name__ == "__main__":
