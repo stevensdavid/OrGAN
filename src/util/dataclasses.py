@@ -43,6 +43,9 @@ class DataclassExtensions:
     def from_tensor(self, t: torch.Tensor) -> DataclassType:
         return type(self)(*t)
 
+    def map(self, op: Callable) -> DataclassType:
+        return type(self)(*tuple(map(op, self.to_tuple())))
+
 
 @dataclass
 class DataShape:
