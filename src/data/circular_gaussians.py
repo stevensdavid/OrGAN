@@ -99,7 +99,7 @@ class CircularGaussians(AbstractDataset):
         print(sample)
         return torch.tensor(sample), torch.tensor(label)
 
-    def random_targets(self, k: int) -> torch.tensor:
+    def random_targets(self, k: int) -> torch.Tensor:
         targets = 2 * pi * torch.rand(k)
         if self.coordinate_type == "cartesian":
             targets = torch.stack([torch.cos(targets), torch.sin(targets)])

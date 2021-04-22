@@ -85,7 +85,7 @@ class HSVFashionMNIST(FashionMNIST, AbstractDataset):
     def _getitem(self, index):
         return self[index]
 
-    def __getitem__(self, index: int) -> Tuple[torch.tensor, torch.tensor]:
+    def __getitem__(self, index: int) -> Tuple[torch.Tensor, torch.Tensor]:
         if self.mode is DataSplit.VAL:
             # We use first `self.len_train` samples for training set, so offset index
             index += self.len_train
@@ -124,7 +124,7 @@ class HSVFashionMNIST(FashionMNIST, AbstractDataset):
         elif self.mode is DataSplit.TEST:
             return len(self)
 
-    def random_targets(self, shape: torch.Size) -> torch.tensor:
+    def random_targets(self, shape: torch.Size) -> torch.Tensor:
         if self.simplified:
             # Only include labels that are part of the dataset
             return torch.tensor(
