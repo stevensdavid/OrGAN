@@ -245,7 +245,7 @@ class HSVFashionMNIST(FashionMNIST, AbstractDataset):
         return_values = return_values.map(reduce)
         return return_values
 
-    def stich_examples(self, real_images, real_labels, fake_images, fake_labels):
+    def stitch_examples(self, real_images, real_labels, fake_images, fake_labels):
         def stitch_image(real, fake, target_label):
             truth = self.ground_truth(real, target_label)
             merged = np.concatenate((real, fake, truth), axis=2)
