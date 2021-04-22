@@ -74,6 +74,9 @@ def parse_args() -> Tuple[Namespace, dict]:
     parser.add_argument("--label_noise_variance", type=float)
     parser.add_argument("--ccgan_wrapper", action="store_true")
     parser.add_argument("--log_hyperparams", action="store_true")
+    parser.add_argument("--optimizer", choices=["adam", "sgd", "rmsprop"])
+    parser.add_argument("--discriminator_lr", type=float, default=1e-3)
+    parser.add_argument("--generator_lr", type=float, default=1e-3)
     args, unknown = parser.parse_known_args()
     hyperparams = {}
     if unknown:
@@ -220,8 +223,14 @@ def train(gpu: int, args: Namespace, train_conf: TrainingConfig):
         sampler=val_sampler if use_ddp else None,
         worker_init_fn=seed_worker,
     )
-    discriminator_opt = Adam(model.discriminator_params(), betas=[0.5, 0.999])
-    generator_opt = Adam(model.generator_params(), betas=[0.5, 0.999])
+    if args.optimizer == "adam":
+        optimizer = lambda params, lr: optim.Adam(params, lr, betas=[0.5, 0.999])
+    elif args.optimizer == "rmsprop":
+        optimizer = lambda params, lr: optim.RMSprop(params, lr)
+    elif args.optimizer == "sgd":
+        optimizer = lambda params, lr: optim.SGD(params, lr)
+    discriminator_opt = optimizer(model.discriminator_params(), args.discriminator_lr)
+    generator_opt = optimizer(model.generator_params(), args.generator_lr)
 
     log_frequency = train_conf.log_frequency * (
         1
