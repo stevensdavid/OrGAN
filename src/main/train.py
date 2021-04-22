@@ -77,6 +77,11 @@ def parse_args() -> Tuple[Namespace, dict]:
     parser.add_argument("--optimizer", choices=["adam", "sgd", "rmsprop"])
     parser.add_argument("--discriminator_lr", type=float, default=1e-3)
     parser.add_argument("--generator_lr", type=float, default=1e-3)
+    parser.add_argument(
+        "--generator_lr_factor",
+        type=int,
+        help="Makes G lr x times higher than discriminator",
+    )
     args, unknown = parser.parse_known_args()
     hyperparams = {}
     if unknown:
@@ -94,6 +99,8 @@ def parse_args() -> Tuple[Namespace, dict]:
                 pass
             hyperparams[k] = v
     vars(args).update(hyperparams)
+    if args.generator_lr_factor is not None:
+        args.generator_lr = args.generator_lr_factor * args.discriminator_lr
     return args
 
 
