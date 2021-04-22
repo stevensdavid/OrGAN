@@ -35,7 +35,12 @@ from util.enums import (
 )
 from util.logging import Logger
 from util.object_loader import build_from_yaml, load_yaml
-from util.pytorch_utils import seed_worker, set_seeds
+from util.pytorch_utils import (
+    load_optimizer_weights,
+    save_optimizers,
+    seed_worker,
+    set_seeds,
+)
 
 
 def parse_args() -> Tuple[Namespace, dict]:
@@ -241,8 +246,6 @@ def train(gpu: int, args: Namespace, train_conf: TrainingConfig):
         optimizer = lambda params, lr: optim.RMSprop(params, lr)
     elif args.optimizer == "sgd":
         optimizer = lambda params, lr: optim.SGD(params, lr)
-    discriminator_opt = optimizer(model.discriminator_params(), args.discriminator_lr)
-    generator_opt = optimizer(model.generator_params(), args.generator_lr)
 
     log_frequency = train_conf.log_frequency * (
         1
@@ -251,12 +254,8 @@ def train(gpu: int, args: Namespace, train_conf: TrainingConfig):
     )
     checkpoint_dir = path.join(args.checkpoint_dir, args.run_name)
     loss_logger = Logger(log_frequency)
-    optimizer_file = path.join(checkpoint_dir, "optimizers.json")
     if args.resume_from is not None:
         loss_logger.restore(checkpoint_dir)
-        opt_state = torch.load(optimizer_file)
-        generator_opt.load_state_dict(opt_state["g_opt"])
-        discriminator_opt.load_state_dict(opt_state["d_opt"])
         model.load_checkpoint(args.resume_from, checkpoint_dir, map_location)
 
     checkpoint_frequency = train_conf.checkpoint_frequency * (
@@ -269,6 +268,15 @@ def train(gpu: int, args: Namespace, train_conf: TrainingConfig):
         model = nn.parallel.DistributedDataParallel(model, device_ids=[gpu])
     else:
         model = nn.DataParallel(model)
+
+    discriminator_opt = optimizer(model.discriminator_params(), args.discriminator_lr)
+    generator_opt = optimizer(model.generator_params(), args.generator_lr)
+    if args.resume_from is not None:
+        # TODO: this should load the rank 0 optimizers for all GPUs in DDP, unsure if ok
+        load_optimizer_weights(
+            generator_opt, discriminator_opt, args.resume_from, checkpoint_dir
+        )
+
     g_scaler = GradScaler()
     d_scaler = GradScaler()
     step = 0
@@ -358,13 +366,7 @@ def train(gpu: int, args: Namespace, train_conf: TrainingConfig):
             step += 1
             if step % checkpoint_frequency == 0 and rank == 0:
                 os.makedirs(checkpoint_dir, exist_ok=True)
-                torch.save(
-                    {
-                        "g_opt": generator_opt.state_dict(),
-                        "d_opt": discriminator_opt.state_dict(),
-                    },
-                    optimizer_file,
-                )
+                save_optimizers(generator_opt, discriminator_opt, step, checkpoint_dir)
                 loss_logger.save(checkpoint_dir)
                 model.module.save_checkpoint(step, checkpoint_dir)
         # Validate

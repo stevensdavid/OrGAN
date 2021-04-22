@@ -1,3 +1,4 @@
+import os
 import random
 
 import numpy as np
@@ -43,3 +44,23 @@ def conv2d_output_size(
     assert output_size.is_integer()
     return int(output_size)
 
+
+def _optimizer_checkpoint_path(checkpoint_dir, step) -> str:
+    return os.path.join(checkpoint_dir, f"optimizers_{step}.pt")
+
+
+def save_optimizers(generator_opt, discriminator_opt, step, checkpoint_dir):
+    file = _optimizer_checkpoint_path(checkpoint_dir, step)
+    torch.save(
+        {"g_opt": generator_opt.state_dict(), "d_opt": discriminator_opt.state_dict()},
+        file,
+    )
+
+
+def load_optimizer_weights(
+    generator_opt, discriminator_opt, step, checkpoint_dir, map_location
+):
+    file = _optimizer_checkpoint_path(checkpoint_dir, step)
+    opt_state = torch.load(file, map_location=map_location)
+    generator_opt.load_state_dict(opt_state["g_opt"])
+    discriminator_opt.load_state_dict(opt_state["d_opt"])
