@@ -1,12 +1,14 @@
-import numpy as np
+from logging import getLogger
 from math import pi
+
 import matplotlib.pyplot as plt
-from matplotlib import cm
-from data.abstract_classes import AbstractDataset
+import numpy as np
 import torch
+from matplotlib import cm
 from util.dataclasses import DataShape
 from util.enums import DataSplit
-from logging import getLogger
+
+from data.abstract_classes import AbstractDataset
 
 
 class CircularGaussians(AbstractDataset):
@@ -97,7 +99,7 @@ class CircularGaussians(AbstractDataset):
         elif self.mode is DataSplit.TEST:
             sample, label = self.test_points[index], self.test_labels[index]
         print(sample)
-        return torch.tensor(sample), torch.tensor(label)
+        return torch.as_tensor(sample), torch.as_tensor(label)
 
     def random_targets(self, k: int) -> torch.Tensor:
         targets = 2 * pi * torch.rand(k)
