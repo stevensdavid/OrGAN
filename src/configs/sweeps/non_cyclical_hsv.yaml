@@ -10,16 +10,25 @@ command:
 method: bayes
 early_terminate:
   type: hyperband
-  min_iter: 50
+  min_iter: 25
 metric:
-  name: val_mae
+  name: rgb_l1
   goal: minimize
 parameters:
   l_rec:
     distribution: uniform
     min: -1.0
     max: 1.0
-  d_updates_per_g:
+  optimizer:
+    values:
+      - rmsprop
+      - adam
+  discriminator_lr:
+    values:
+      - -2.0
+      - -3.0
+      - -4.0
+  generator_lr_factor:
     values:
       - 1
-      - 5
+      - 3
