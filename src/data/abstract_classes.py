@@ -1,6 +1,7 @@
-from torch.utils.data import Dataset
 from abc import ABC, abstractmethod
-from torch import tensor, Size
+
+from torch import Size, tensor
+from torch.utils.data import Dataset
 from util.dataclasses import DataShape
 from util.enums import DataSplit
 
@@ -13,10 +14,7 @@ class AbstractDataset(Dataset, ABC):
     def random_targets(self, shape: Size) -> tensor:
         ...
 
-    def set_mode(
-        self,
-        mode: DataSplit,
-    ) -> None:
+    def set_mode(self, mode: DataSplit) -> None:
         self.mode = mode
 
     def __len__(self) -> int:
@@ -39,4 +37,8 @@ class AbstractDataset(Dataset, ABC):
 
     @abstractmethod
     def data_shape(self) -> DataShape:
+        ...
+
+    @abstractmethod
+    def performance(self, real_images, real_labels, fake_images, fake_labels) -> dict:
         ...
