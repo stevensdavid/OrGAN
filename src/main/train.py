@@ -25,8 +25,9 @@ from torch.cuda.amp import GradScaler, autocast
 from torch.utils.data import DataLoader
 from tqdm import trange
 from util.cyclical_encoding import to_cyclical
-from util.dataclasses import TrainingConfig
-from util.enums import DataSplit, FrequencyMetric, MultiGPUType, VicinityType
+from util.dataclasses import DataclassExtensions, TrainingConfig
+from util.enums import (DataSplit, FrequencyMetric, MultiGPUType,
+                        ReductionType, VicinityType)
 from util.logging import Logger
 from util.object_loader import build_from_yaml, load_yaml
 from util.pytorch_utils import seed_worker, set_seeds
@@ -365,13 +366,12 @@ def train(gpu: int, args: Namespace, train_conf: TrainingConfig):
         if use_ddp:
             dist.barrier()
         model.module.set_eval()
-        # TODO: generalize this to other data sets
-        total_norm = 0
-        total_mae = 0
         n_attempts = 5
+        total_performance: DataclassExtensions = 0
         with torch.no_grad():
-            for samples, _ in iter(val_data):
+            for samples, real_labels in iter(val_data):
                 cuda_samples = samples.to(device, non_blocking=True)
+                real_labels = real_labels.to(device, non_blocking=True)
                 for attempt in range(n_attempts):
                     target_labels = val_dataset.random_targets(len(samples))
                     cuda_labels = torch.unsqueeze(target_labels, 1).to(
@@ -381,35 +381,31 @@ def train(gpu: int, args: Namespace, train_conf: TrainingConfig):
                         cuda_labels = to_cyclical(cuda_labels)
                     cuda_labels = generator_labels(cuda_labels)
 
-                    val_dataset: HSVFashionMNIST  # TODO: break assumption
-                    ground_truth = val_dataset.ground_truths(samples, target_labels)
                     with autocast():
                         generated = model.module.generator.transform(
                             cuda_samples, cuda_labels
                         )
-                    cuda_ground_truth = torch.tensor(ground_truth, device=device)
-                    total_norm += torch.sum(
-                        torch.linalg.norm(cuda_ground_truth - generated, dim=0)
+                    performance = val_dataset.performance(
+                        cuda_samples,
+                        real_labels,
+                        generated,
+                        target_labels,
+                        reduction=ReductionType.SUM,
                     )
-                    total_mae += torch.sum(
-                        torch.mean(torch.abs(cuda_ground_truth - generated), dim=0)
-                    )
+                    total_performance = performance + total_performance
         if use_ddp:
+            performance_tensor = total_performance.to_tensor()
             # Sum across processes in distributed system
-            dist.all_reduce(total_norm, op=dist.ReduceOp.SUM)
-            dist.all_reduce(total_mae, op=dist.ReduceOp.SUM)
-        val_norm = total_norm / (len(val_dataset) * n_attempts)
-        val_mae = total_mae / (len(val_dataset) * n_attempts)
+            dist.all_reduce(performance_tensor, op=dist.ReduceOp.SUM)
+            total_performance = total_performance.from_tensor(performance_tensor)
+        val_performance = total_performance / (len(val_dataset) * n_attempts)
         # Log the last batch of images
         if rank == 0:
-            log_fakes = val_dataset.denormalize(generated[:10].cpu())
-            log_inputs = val_dataset.denormalize(samples[:10])
-            log_truths = val_dataset.denormalize(ground_truth[:10])
-            log_labels = target_labels[:10]
-            loss_logger.track_images(log_inputs, log_fakes, log_truths, log_labels)
-            loss_logger.track_summary_metric("val_norm", val_norm)
-            loss_logger.track_summary_metric("val_mae", val_mae)
-            loss_logger.track_summary_metric("epoch", epoch)
+            examples = val_dataset.stitch_examples(
+                samples[:10], real_labels[:10], generated[:10].cpu(), target_labels[:10]
+            )
+            loss_logger.track_images(examples)
+            loss_logger.track_summary_metrics(val_performance)
     # Training finished
     if rank == 0:
         model.module.save_checkpoint(step, checkpoint_dir)

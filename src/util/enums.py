@@ -20,3 +20,9 @@ class VicinityType(Enum):
 class MultiGPUType(Enum):
     DDP = auto()
     DATA_PARALLEL = auto()
+
+
+class ReductionType(Enum):
+    SUM = auto()
+    MEAN = auto()
+    NONE = auto()

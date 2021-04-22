@@ -1,10 +1,13 @@
 from collections import defaultdict
-from dataclasses import asdict
+from dataclasses import asdict, fields
 from os.path import join
+from typing import List
 
 import numpy as np
 import torch
 import wandb
+
+from util.dataclasses import DataclassType, GeneratedExamples
 
 
 def add_key_prefix(dictionary: dict, prefix: str, separator: str = "/") -> dict:
@@ -42,27 +45,18 @@ class Logger:
             self.discriminator_loss = 0
             self.generator_loss = 0
 
+    def track_summary_metrics(self, metrics: DataclassType):
+        for name in fields(metrics):
+            self.track_summary_metric(name, getattr(metrics, name))
+
     def track_summary_metric(self, metric_name: str, value: float):
         if value > self.summary[metric_name]:
             self.summary[metric_name] = value
         wandb.log({metric_name: value}, step=self.steps, commit=False)
 
-    def track_images(self, inputs, outputs, ground_truths=None, labels=None) -> None:
-        # TODO: make work without ground truth/labels
-        if outputs[0].shape[0] != 3 or ground_truths[0].shape[0] != 3:
-            raise AssertionError("Incorrect shape in track_images")
-        log_images = [
-            np.concatenate((inputs, fake, real), axis=2)
-            for inputs, fake, real in zip(inputs, outputs, ground_truths)
-        ]
-        log_images = [np.moveaxis(x, 0, -1) for x in log_images]
+    def track_images(self, examples: List[GeneratedExamples]) -> None:
         wandb.log(
-            {
-                "examples": [
-                    wandb.Image(x, caption=f"H={y:.3f}")
-                    for x, y in zip(log_images, labels)
-                ]
-            },
+            {"examples": [wandb.Image(x.image, caption=x.label) for x in examples]},
             commit=False,
         )
 
