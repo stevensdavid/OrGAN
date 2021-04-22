@@ -420,6 +420,7 @@ def train(gpu: int, args: Namespace, train_conf: TrainingConfig):
             )
             loss_logger.track_images(examples)
             loss_logger.track_summary_metrics(val_performance)
+            loss_logger.track_summary_metric("epoch", epoch)
     # Training finished
     if rank == 0:
         model.module.save_checkpoint(step, checkpoint_dir)
