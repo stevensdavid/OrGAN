@@ -64,8 +64,11 @@ class Logger:
         # wandb.run.summary = {**wandb.run.summary, **self.summary} # TODO: buggy
         wandb.finish()
 
-    def save(self, checkpoint_dir: str):
-        path = join(checkpoint_dir, "loss_logger.json")
+    def _checkpoint_path(self, checkpoint_dir: str, step: int):
+        return join(checkpoint_dir, f"loss_logger_step_{step}.json")
+
+    def save(self, checkpoint_dir: str, step: int):
+        path = self._checkpoint_path(checkpoint_dir, step)
         state = {
             "generator_loss": self.generator_loss,
             "discriminator_loss": self.discriminator_loss,
@@ -74,8 +77,8 @@ class Logger:
         }
         torch.save(state, path)
 
-    def restore(self, checkpoint_dir: str):
-        path = join(checkpoint_dir, "loss_logger.json")
+    def restore(self, checkpoint_dir: str, step: int):
+        path = self._checkpoint_path(checkpoint_dir, step)
         checkpoint = torch.load(path)
         self.generator_loss = checkpoint["generator_loss"]
         self.discriminator_loss = checkpoint["discriminator_loss"]

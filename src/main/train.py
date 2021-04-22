@@ -255,7 +255,7 @@ def train(gpu: int, args: Namespace, train_conf: TrainingConfig):
     checkpoint_dir = path.join(args.checkpoint_dir, args.run_name)
     loss_logger = Logger(log_frequency)
     if args.resume_from is not None:
-        loss_logger.restore(checkpoint_dir)
+        loss_logger.restore(checkpoint_dir, args.resume_from)
         model.load_checkpoint(args.resume_from, checkpoint_dir, map_location)
 
     checkpoint_frequency = train_conf.checkpoint_frequency * (
@@ -371,7 +371,7 @@ def train(gpu: int, args: Namespace, train_conf: TrainingConfig):
             if step % checkpoint_frequency == 0 and rank == 0:
                 os.makedirs(checkpoint_dir, exist_ok=True)
                 save_optimizers(generator_opt, discriminator_opt, step, checkpoint_dir)
-                loss_logger.save(checkpoint_dir)
+                loss_logger.save(checkpoint_dir, step)
                 model.module.save_checkpoint(step, checkpoint_dir)
         # Validate
         if use_ddp:
