@@ -20,9 +20,8 @@ from data.ccgan_wrapper import CcGANDatasetWrapper
 from data.fashion_mnist import HSVFashionMNIST
 from models.abstract_model import AbstractI2I
 from models.ccgan import LabelEmbedding
-from torch import nn
+from torch import nn, optim
 from torch.cuda.amp import GradScaler, autocast
-from torch.optim import Adam
 from torch.utils.data import DataLoader
 from tqdm import trange
 from util.cyclical_encoding import to_cyclical
@@ -288,10 +287,8 @@ def train(gpu: int, args: Namespace, train_conf: TrainingConfig):
                     labels["labels"],
                     labels["label_weights"],
                 )
-                target_weights = torch.ones(args.batch_size)  # TODO: remove this maybe
             else:
                 sample_weights = torch.ones(args.batch_size)
-                target_weights = torch.ones(args.batch_size)
                 target_labels = train_dataset.random_targets(labels.shape)
             if hyperparams.get("label_noise_variance", None) is not None:
                 labels = labels + torch.normal(
@@ -308,7 +305,6 @@ def train(gpu: int, args: Namespace, train_conf: TrainingConfig):
             labels = labels.to(device, non_blocking=True)
             sample_weights = sample_weights.to(device, non_blocking=True)
             target_labels = target_labels.to(device, non_blocking=True)
-            target_weights = target_weights.to(device, non_blocking=True)
             discriminator_targets = discriminator_labels(target_labels)
             generator_targets = generator_labels(target_labels)
             discriminator_input_labels = discriminator_labels(labels)
@@ -321,7 +317,6 @@ def train(gpu: int, args: Namespace, train_conf: TrainingConfig):
                     discriminator_targets,
                     generator_targets,
                     sample_weights,
-                    target_weights,
                 )
             d_scaler.scale(discriminator_loss.total).backward()
             d_scaler.step(discriminator_opt)
