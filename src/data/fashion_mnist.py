@@ -107,8 +107,8 @@ class HSVFashionMNIST(FashionMNIST, AbstractDataset):
                     raise ValueError("Noisy labels not supported without fixed labels.")
         x = self.shift_hue(x, hue)
         # Scale to [-1,1]
-        x = torch.as_tensor(x, dtype=torch.float32)
-        y = torch.as_tensor([y], dtype=torch.float32)
+        x = torch.tensor(x, dtype=torch.float32)
+        y = torch.tensor([y], dtype=torch.float32)
         x = self.pad(x)  # Zero-pads 28x28 to 32x32
         x = self.normalize(x)
         return x, y
@@ -127,7 +127,7 @@ class HSVFashionMNIST(FashionMNIST, AbstractDataset):
     def random_targets(self, shape: torch.Size) -> torch.Tensor:
         if self.simplified:
             # Only include labels that are part of the dataset
-            return torch.as_tensor(
+            return torch.tensor(
                 np.random.choice(self.ys, size=shape), dtype=torch.float32
             )
         return (self.max_hue - self.min_hue) * torch.rand(shape) + self.min_hue
@@ -207,7 +207,7 @@ class HSVFashionMNIST(FashionMNIST, AbstractDataset):
         x = np.moveaxis(x, 1, -1)
         x = skimage.color.rgb2hsv(x)
         x = np.moveaxis(x, -1, 0)
-        return torch.as_tensor(x, device=t.device)
+        return torch.tensor(x, device=t.device)
 
     def performance(
         self,
@@ -218,7 +218,7 @@ class HSVFashionMNIST(FashionMNIST, AbstractDataset):
         reduction: ReductionType,
     ) -> HSVFashionMNISTPerformance:
         ground_truths = self.ground_truths(real_images, fake_labels)
-        ground_truths = torch.as_tensor(ground_truths, device=fake_images.device)
+        ground_truths = torch.tensor(ground_truths, device=fake_images.device)
         rgb_l1 = torch.mean(torch.abs(ground_truths - fake_images), dim=0)
         rgb_l2 = torch.linalg.norm(ground_truths - fake_images, dim=0)
         hsv_truths = self.rgb_tensor_to_hsv(ground_truths)

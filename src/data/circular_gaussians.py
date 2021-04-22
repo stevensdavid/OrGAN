@@ -99,7 +99,7 @@ class CircularGaussians(AbstractDataset):
         elif self.mode is DataSplit.TEST:
             sample, label = self.test_points[index], self.test_labels[index]
         print(sample)
-        return torch.as_tensor(sample), torch.as_tensor(label)
+        return torch.tensor(sample), torch.tensor(label)
 
     def random_targets(self, k: int) -> torch.Tensor:
         targets = 2 * pi * torch.rand(k)
