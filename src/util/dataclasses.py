@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from dataclasses import astuple, dataclass, fields
 from operator import add, sub
-from typing import Dict, Union
+from typing import Callable, Dict, Union
 
 import torch
 from typing_extensions import Protocol
@@ -82,6 +82,12 @@ class TrainingConfig:
             else MultiGPUType.DATA_PARALLEL
         )
         return TrainingConfig(**cfg)
+
+
+@dataclass
+class GeneratedExamples:
+    image: torch.tensor
+    label: str
 
 
 if __name__ == "__main__":
