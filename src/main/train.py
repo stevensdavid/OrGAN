@@ -318,6 +318,9 @@ def train(gpu: int, args: Namespace, train_conf: TrainingConfig):
                 )
                 if args.cyclical:
                     labels %= 1
+                else:
+                    # TODO: generalize
+                    labels = torch.clamp(labels, 0, 1)
             raw_labels = labels
             if args.cyclical:
                 labels = to_cyclical(labels)
