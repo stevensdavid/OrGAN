@@ -1,10 +1,10 @@
 from abc import ABC, abstractmethod
-from typing import List
+from typing import List, Optional
 
 import numpy as np
 from torch import Size, tensor
 from torch.utils.data import Dataset
-from util.dataclasses import DataShape, GeneratedExamples
+from util.dataclasses import DataShape, GeneratedExamples, LabelDomain
 from util.enums import DataSplit
 
 
@@ -57,4 +57,8 @@ class AbstractDataset(Dataset, ABC):
 
     @abstractmethod
     def performance(self, real_images, real_labels, fake_images, fake_labels) -> dict:
+        ...
+
+    @abstractmethod
+    def label_domain(self) -> Optional[LabelDomain]:
         ...

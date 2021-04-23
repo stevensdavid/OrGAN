@@ -7,7 +7,12 @@ import torch
 import torch.linalg
 from torch import nn
 from torchvision.datasets import FashionMNIST
-from util.dataclasses import DataclassExtensions, DataShape, GeneratedExamples
+from util.dataclasses import (
+    DataclassExtensions,
+    DataShape,
+    GeneratedExamples,
+    LabelDomain,
+)
 from util.enums import DataSplit, ReductionType
 
 from data.abstract_classes import AbstractDataset
@@ -81,6 +86,9 @@ class HSVFashionMNIST(FashionMNIST, AbstractDataset):
             if self.cyclical:
                 self.hues %= 1
         self.pad = nn.ZeroPad2d(2)
+
+    def label_domain(self) -> LabelDomain:
+        return LabelDomain(self.min_hue, self.max_hue)
 
     def _getitem(self, index):
         return self[index]

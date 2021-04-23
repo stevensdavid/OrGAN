@@ -90,6 +90,12 @@ class GeneratedExamples:
     label: str
 
 
+@dataclass
+class LabelDomain:
+    min: float
+    max: float
+
+
 if __name__ == "__main__":
 
     @dataclass

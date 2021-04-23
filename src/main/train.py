@@ -319,8 +319,9 @@ def train(gpu: int, args: Namespace, train_conf: TrainingConfig):
                 if args.cyclical:
                     labels %= 1
                 else:
-                    # TODO: generalize
-                    labels = torch.clamp(labels, 0, 1)
+                    label_domain = train_dataset.label_domain()
+                    if label_domain is not None:
+                        labels = torch.clamp(labels, label_domain.min, label_domain.max)
             raw_labels = labels
             if args.cyclical:
                 labels = to_cyclical(labels)
