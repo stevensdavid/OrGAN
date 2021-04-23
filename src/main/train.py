@@ -309,7 +309,7 @@ def train(gpu: int, args: Namespace, train_conf: TrainingConfig):
                     labels["label_weights"],
                 )
             else:
-                sample_weights = torch.ones(args.batch_size)
+                sample_weights = torch.ones(labels.shape[0])
                 target_labels = train_dataset.random_targets(labels.shape)
             if hyperparams.get("label_noise_variance", None) is not None:
                 labels = labels + torch.normal(
