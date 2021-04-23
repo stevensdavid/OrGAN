@@ -101,3 +101,8 @@ class CcGANDatasetWrapper(AbstractDataset):
     def set_mode(self, mode: DataSplit) -> None:
         super().set_mode(mode)
         self.dataset.set_mode(mode)
+
+    def performance(self, real_images, real_labels, fake_images, fake_labels) -> dict:
+        return self.dataset.performance(
+            real_images, real_labels, fake_images, fake_labels
+        )
