@@ -26,16 +26,16 @@ class Hyperparams:
 @dataclass
 class DiscriminatorLoss(DataclassExtensions):
     total: Tensor
-    classification_real: Tensor
-    classification_fake: Tensor
+    relative_real: Tensor
+    relative_fake: Tensor
     label_error: Tensor
-    gradient_penalty: Tensor
 
 
 @dataclass
 class GeneratorLoss(DataclassExtensions):
     total: Tensor
-    classification_fake: Tensor
+    relative_real: Tensor
+    relative_fake: Tensor
     label_error: Tensor
     reconstruction: Tensor
 
@@ -88,48 +88,24 @@ class StarGAN(nn.Module, AbstractI2I):
     ) -> DiscriminatorLoss:
         sample_weights = sample_weights.view(-1, 1, 1, 1)
         # Discriminator losses with real images
-        sources, labels = self.discriminator(input_image)
-        classification_real = -torch.mean(sources)  # Should be 0 (real) for all
-        label_real = self.hyperparams.l_mse * torch.mean(
-            sample_weights * self.square_error(labels, input_label)
-        )
-        # Discriminator losses with fake images
-        fake_image = self.generator.transform(
+        real_sources, real_labels = self.discriminator(input_image)
+        fake_images = self.generator.transform(
             input_image, embedded_target_label
         ).detach()
-        sources, _ = self.discriminator(fake_image)
-        classification_fake = torch.mean(sources)  # Should be 1 (fake) for all
-        # Gradient penalty loss
-        alpha = torch.rand(input_image.size(0), 1, 1, 1).to(self.device)
-        # Blend real and fake image randomly
-        x_hat = (
-            alpha * input_image.data + (1 - alpha) * fake_image.data
-        ).requires_grad_(True)
-        grad_sources, _ = self.discriminator(x_hat)
-        weight = torch.ones(grad_sources.size(), device=self.device)
-        gradient = torch.autograd.grad(
-            outputs=grad_sources,
-            inputs=x_hat,
-            grad_outputs=weight,
-            retain_graph=True,
-            create_graph=True,
-            only_inputs=True,
-        )[0]
-        gradient = gradient.view(gradient.size(0), -1)
-        gradient_norm = torch.sqrt(torch.sum(gradient ** 2, dim=1))
-        gradient_penalty = torch.mean((gradient_norm - 1) ** 2)
-        gradient_penalty *= self.hyperparams.l_grad_penalty
+        fake_sources, _ = self.discriminator(fake_images)
+        # Relastivistic average least square loss
+        average_real = torch.mean(real_sources)
+        average_fake = torch.mean(fake_sources)
+        real_loss = torch.mean(
+            sample_weights * ((real_sources - average_fake - 1) ** 2)
+        )
+        fake_loss = torch.mean(((fake_sources - average_real + 1) ** 2))
 
-        total = (
-            classification_real + classification_fake + label_real + gradient_penalty
+        label_error = self.hyperparams.l_mse * torch.mean(
+            sample_weights * self.square_error(real_labels, input_label)
         )
-        return DiscriminatorLoss(
-            total,
-            classification_real,
-            classification_fake,
-            label_real,
-            gradient_penalty,
-        )
+        total_loss = (real_loss + fake_loss) / 2 + label_error
+        return DiscriminatorLoss(total_loss, real_loss, fake_loss, label_error,)
 
     def generator_loss(
         self,
@@ -138,20 +114,37 @@ class StarGAN(nn.Module, AbstractI2I):
         embedded_input_label: Tensor,
         target_label: Tensor,
         embedded_target_label: Tensor,
+        sample_weights: Tensor,
     ) -> GeneratorLoss:
         # Input to target
         fake_image = self.generator.transform(input_image, embedded_target_label)
-        sources, labels = self.discriminator(fake_image)
-        g_loss_fake = -torch.mean(sources)
-        g_loss_mse = self.hyperparams.l_mse * self.mse(labels, target_label)
+        fake_sources, fake_labels = self.discriminator(fake_image)
+        real_sources, _ = self.discriminator(input_image)
+        average_real = torch.mean(real_sources)
+        average_fake = torch.mean(fake_sources)
+        # Relativistic average least squares loss
+        real_loss = torch.mean(
+            sample_weights * ((real_sources - average_fake + 1) ** 2)
+        )
+        fake_loss = torch.mean((fake_sources - average_real - 1) ** 2)
+        average_real = torch.mean(real_sources)
+        average_fake = torch.mean(fake_sources)
+        real_loss = torch.mean(
+            sample_weights * ((real_sources - average_fake + 1) ** 2)
+        )
+        fake_loss = torch.mean((fake_sources - average_real - 1) ** 2)
+
+        label_error = self.hyperparams.l_mse * self.mse(fake_labels, target_label)
 
         # Target to input
         reconstructed_image = self.generator.transform(fake_image, embedded_input_label)
-        g_loss_rec = self.hyperparams.l_rec * torch.mean(
+        reconstruction_loss = self.hyperparams.l_rec * torch.mean(
             torch.abs(input_image - reconstructed_image)
         )
 
-        total = g_loss_fake + g_loss_mse + g_loss_rec
+        total = (real_loss + fake_loss) / 2 + label_error + reconstruction_loss
 
-        return GeneratorLoss(total, g_loss_fake, g_loss_mse, g_loss_rec,)
+        return GeneratorLoss(
+            total, real_loss, fake_loss, label_error, reconstruction_loss,
+        )
 

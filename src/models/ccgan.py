@@ -213,8 +213,8 @@ class CCStarGAN(StarGAN):
             **kwargs,
         )
         self.generator = CCGenerator(data_shape, g_conv_dim, g_num_bottleneck)
-        self.ccgan_discriminator = embed_discriminator
-        if self.ccgan_discriminator:
+        self.embed_discriminator = embed_discriminator
+        if self.embed_discriminator:
             self.discriminator = CCDiscriminator(data_shape, d_conv_dim, d_num_scales)
         elif l_mse is None:
             raise TypeError("Missing mandatory hyperparameter for PatchGAN disc: l_mse")
@@ -255,13 +255,14 @@ class CCStarGAN(StarGAN):
         embedded_target_label: Tensor,
         sample_weights: Tensor,
     ) -> Union[CCGeneratorLoss, GeneratorLoss]:
-        if not self.ccgan_discriminator:
+        if not self.embed_discriminator:
             return super().generator_loss(
                 input_image,
                 input_label,
                 embedded_input_label,
                 target_label,
                 embedded_target_label,
+                sample_weights,
             )
         sample_weights = sample_weights.view(-1, 1, 1, 1)
         # Input to target
@@ -320,8 +321,8 @@ class CCFPGAN(FPGAN):
             **kwargs,
         )
         self.generator = CCGenerator(data_shape, g_conv_dim, g_num_bottleneck)
-        self.ccgan_discriminator = embed_discriminator
-        if self.ccgan_discriminator:
+        self.embed_discriminator = embed_discriminator
+        if self.embed_discriminator:
             self.discriminator = CCDiscriminator(data_shape, d_conv_dim, d_num_scales)
         elif l_mse is None:
             raise TypeError("Missing mandatory hyperparameter for PatchGAN disc: l_mse")
@@ -334,7 +335,7 @@ class CCFPGAN(FPGAN):
         sample_weights: Tensor,
         target_weights: Tensor,
     ) -> Union[CCDiscriminatorLoss, DiscriminatorLoss]:
-        if not self.ccgan_discriminator:
+        if not self.embed_discriminator:
             return super().discriminator_loss(
                 input_image, input_label, embedded_target_label, sample_weights
             )
@@ -392,7 +393,7 @@ class CCFPGAN(FPGAN):
         embedded_target_label: Tensor,
         sample_weights: Tensor,
     ) -> Union[CCGeneratorLoss, GeneratorLoss]:
-        if not self.ccgan_discriminator:
+        if not self.embed_discriminator:
             return super().generator_loss(
                 input_image,
                 input_label,
