@@ -228,6 +228,10 @@ class CCStarGAN(StarGAN):
         generator_target_label: Tensor,
         sample_weights: Tensor,
     ) -> Union[CCDiscriminatorLoss, DiscriminatorLoss]:
+        if not self.embed_discriminator:
+            return super().discriminator_loss(
+                input_image, input_label, generator_target_label, sample_weights
+            )
         sample_weights = sample_weights.view(-1, 1, 1, 1)
         real_sources = self.discriminator(input_image, input_label)
         fake_images = self.generator.transform(
