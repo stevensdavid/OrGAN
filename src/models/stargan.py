@@ -116,6 +116,7 @@ class StarGAN(nn.Module, AbstractI2I):
         embedded_target_label: Tensor,
         sample_weights: Tensor,
     ) -> GeneratorLoss:
+        sample_weights = sample_weights.view(-1, 1, 1, 1)
         # Input to target
         fake_image = self.generator.transform(input_image, embedded_target_label)
         fake_sources, fake_labels = self.discriminator(fake_image)
