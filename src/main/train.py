@@ -404,7 +404,7 @@ def train(gpu: int, args: Namespace, train_conf: TrainingConfig):
                     )
                     if args.cyclical:
                         cuda_targets = to_cyclical(cuda_targets)
-                    generator_targets = generator_labels(generator_targets)
+                    generator_targets = generator_labels(cuda_targets)
 
                     if val_dataset.has_performance_metrics():
                         with autocast():
