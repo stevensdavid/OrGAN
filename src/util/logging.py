@@ -45,9 +45,11 @@ class Logger:
             self.discriminator_loss = 0
             self.generator_loss = 0
 
-    def track_summary_metrics(self, metrics: DataclassType):
+    def track_summary_metrics(self, metrics: DataclassType, prefix=""):
         for field in fields(metrics):
-            self.track_summary_metric(field.name, getattr(metrics, field.name))
+            self.track_summary_metric(
+                f"{prefix}{field.name}", getattr(metrics, field.name)
+            )
 
     def track_summary_metric(self, metric_name: str, value: float):
         if value > self.summary[metric_name]:

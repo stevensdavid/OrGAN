@@ -127,6 +127,9 @@ class BinaryQuickDraw(AbstractDataset):
     def performance(self, real_images, real_labels, fake_images, fake_labels) -> None:
         return None
 
+    def has_performance_metrics(self) -> bool:
+        return False
+
 
 if __name__ == "__main__":
     dataset = BinaryQuickDraw("data/quickdraw")

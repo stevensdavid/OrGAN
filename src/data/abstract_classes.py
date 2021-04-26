@@ -63,3 +63,6 @@ class AbstractDataset(Dataset, ABC):
     @abstractmethod
     def label_domain(self) -> Optional[LabelDomain]:
         ...
+
+    def has_performance_metrics(self) -> bool:
+        return True

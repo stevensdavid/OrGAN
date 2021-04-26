@@ -388,28 +388,50 @@ def train(gpu: int, args: Namespace, train_conf: TrainingConfig):
         total_performance: DataclassExtensions = 0
         with torch.no_grad():
             for samples, real_labels in iter(val_data):
+                if args.ccgan_wrapper:
+                    real_labels, sample_weights = (
+                        real_labels["labels"],
+                        real_labels["label_weights"],
+                    )
+                else:
+                    sample_weights = torch.ones(real_labels.shape[0])
                 cuda_samples = samples.to(device, non_blocking=True)
                 real_labels = real_labels.to(device, non_blocking=True)
                 for attempt in range(n_attempts):
                     target_labels = val_dataset.random_targets(len(samples))
-                    cuda_labels = torch.unsqueeze(target_labels, 1).to(
+                    cuda_targets = torch.unsqueeze(target_labels, 1).to(
                         device, non_blocking=True
                     )
                     if args.cyclical:
-                        cuda_labels = to_cyclical(cuda_labels)
-                    cuda_labels = generator_labels(cuda_labels)
+                        cuda_targets = to_cyclical(cuda_targets)
+                    generator_targets = generator_labels(generator_targets)
 
-                    with autocast():
-                        generated = model.module.generator.transform(
-                            cuda_samples, cuda_labels
+                    if val_dataset.has_performance_metrics():
+                        with autocast():
+                            generated = model.module.generator.transform(
+                                cuda_samples, generator_targets
+                            )
+                        performance = val_dataset.performance(
+                            cuda_samples,
+                            real_labels,
+                            generated,
+                            target_labels,
+                            reduction=ReductionType.SUM,
                         )
-                    performance = val_dataset.performance(
-                        cuda_samples,
-                        real_labels,
-                        generated,
-                        target_labels,
-                        reduction=ReductionType.SUM,
-                    )
+                    else:
+                        # dataset doesn't support performance metric, use generator loss
+                        # as proxy
+                        discriminator_input_labels = discriminator_labels(real_labels)
+                        generator_input_labels = generator_labels(real_labels)
+                        discriminator_targets = discriminator_labels(cuda_targets)
+                        with autocast():
+                            performance = model.generator_loss(
+                                cuda_samples,
+                                discriminator_input_labels,
+                                generator_input_labels,
+                                discriminator_targets,
+                                sample_weights,
+                            )
                     total_performance = performance + total_performance
         if use_ddp:
             performance_tensor = total_performance.to_tensor()
@@ -423,7 +445,10 @@ def train(gpu: int, args: Namespace, train_conf: TrainingConfig):
                 samples[:10], real_labels[:10], generated[:10].cpu(), target_labels[:10]
             )
             loss_logger.track_images(examples)
-            loss_logger.track_summary_metrics(val_performance)
+            loss_logger.track_summary_metrics(
+                val_performance,
+                prefix="" if val_dataset.has_performance_metrics() else "val_",
+            )
             loss_logger.track_summary_metric("epoch", epoch)
     # Training finished
     if rank == 0:
