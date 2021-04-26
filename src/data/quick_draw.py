@@ -103,12 +103,6 @@ class BinaryQuickDraw(AbstractDataset):
             torch.tensor([y], dtype=torch.float32),
         )
 
-    def normalize(self, x: torch.Tensor) -> torch.Tensor:
-        return x * 2 - 1
-
-    def denormalize(self, x: torch.Tensor) -> torch.Tensor:
-        return (x + 1) / 2
-
     def _len(self) -> int:
         if self.mode is DataSplit.TRAIN:
             return self.len_train

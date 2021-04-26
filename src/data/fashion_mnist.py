@@ -187,28 +187,6 @@ class HSVFashionMNIST(FashionMNIST, AbstractDataset):
     def ground_truths(self, xs: List[np.ndarray], ys: List[float]) -> np.ndarray:
         return np.asarray([self.ground_truth(x, y) for x, y in zip(xs, ys)])
 
-    def normalize(self, x: np.ndarray) -> np.ndarray:
-        """Scale from [0,1] to [-1,1]
-
-        Args:
-            x (np.ndarray): Image with values in range [0,1]
-
-        Returns:
-            np.ndarray: Image with values in range [-1,1]
-        """
-        return 2 * x - 1
-
-    def denormalize(self, x: np.ndarray) -> np.ndarray:
-        """Scale from [-1,1] to [0,1]
-
-        Args:
-            x (np.ndarray): Image with values in range [-1,1]
-
-        Returns:
-            np.ndarray: Image with values in range [0,1]
-        """
-        return (x + 1) / 2
-
     def rgb_tensor_to_hsv(self, t: torch.Tensor) -> torch.Tensor:
         x = t.cpu().numpy()
         x = self.denormalize(x)
