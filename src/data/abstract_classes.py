@@ -2,7 +2,7 @@ from abc import ABC, abstractmethod
 from typing import List, Optional
 
 import numpy as np
-from torch import Size, tensor
+import torch
 from torch.utils.data import Dataset
 from util.dataclasses import DataShape, GeneratedExamples, LabelDomain
 from util.enums import DataSplit
@@ -11,9 +11,10 @@ from util.enums import DataSplit
 class AbstractDataset(Dataset, ABC):
     def __init__(self) -> None:
         super().__init__()
+        self.mode: DataSplit = None
 
     @abstractmethod
-    def random_targets(self, shape: Size) -> tensor:
+    def random_targets(self, shape: torch.Size) -> torch.Tensor:
         ...
 
     def set_mode(self, mode: DataSplit) -> None:
