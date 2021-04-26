@@ -18,38 +18,47 @@ class AbstractI2I(ABC):
         self,
         input_image: Tensor,
         input_label: Tensor,
-        target_label: Tensor,
+        target_labels: Tensor,
+        generator_target_label: Tensor,
         sample_weights: Tensor,
-        target_weights: Tensor,
     ) -> DataclassType:
         """[summary]
 
         Args:
             input_image (Tensor): [description]
             input_label (Tensor): [description]
-            target_label (Tensor): [description]
+            target_labels (Tensor): [description]
+            generator_target_label (Tensor): [description]
             sample_weights (Tensor): [description]
-            target_weights (Tensor): [description]
 
         Returns:
             DataclassType: [description]
-        """
+        """        
         ...
 
     @abstractmethod
     def generator_loss(
-        self, input_image: Tensor, input_label: Tensor, target_label: Tensor
+        self,
+        input_image: Tensor,
+        input_label: Tensor,
+        embedded_input_label: Tensor,
+        target_label: Tensor,
+        embedded_target_label: Tensor,
+        sample_weights: Tensor,
     ) -> DataclassType:
         """[summary]
 
         Args:
             input_image (Tensor): [description]
             input_label (Tensor): [description]
+            embedded_input_label (Tensor): [description]
             target_label (Tensor): [description]
+            embedded_target_label (Tensor): [description]
+            sample_weights (Tensor): [description]
 
         Returns:
             DataclassType: [description]
-        """
+        """        
         ...
 
     def discriminator_params(self) -> torch.nn.parameter.Parameter:
