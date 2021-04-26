@@ -5,6 +5,7 @@ class DataSplit(Enum):
     TRAIN = auto()
     VAL = auto()
     TEST = auto()
+    HOLDOUT = auto()
 
 
 class FrequencyMetric(Enum):
