@@ -30,6 +30,16 @@ class DepthOfField(AbstractDataset):
             [transforms.RandomHorizontalFlip()] + transformations
         )
         self.val_transform = transforms.Compose(transformations)
+        min_label = min(self.labels)
+        max_label = max(self.labels)
+        self.log_min = np.log(min_label)
+        self.log_max = np.log(max_label)
+
+    def normalize_label(self, y: float) -> float:
+        return (np.log(y) - self.log_min) / (self.log_max - self.log_min)
+
+    def denormalize_label(self, y: float) -> float:
+        return np.exp(y * (self.log_max - self.log_min) + self.log_min)
 
     def preprocess(
         self, mirflickr_root, unsplash_root
@@ -80,6 +90,7 @@ class DepthOfField(AbstractDataset):
             image = self.val_transform(image)
         label = torch.tensor(label, dtype=torch.float32)
         image = self.normalize(image)
+        label = self.normalize_label(label)
         return image, label
 
     def data_shape(self) -> DataShape:
@@ -103,6 +114,7 @@ if __name__ == "__main__":
     )
     dataset.set_mode(DataSplit.TRAIN)
     x, y = dataset[0]
+    assert np.allclose(y, dataset.denormalize_label(dataset.normalize_label(y)))
     x = dataset.denormalize(x)
     import matplotlib.pyplot as plt
 
