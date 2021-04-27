@@ -62,6 +62,8 @@ class TrainingConfig:
     log_frequency: int
     log_frequency_metric: FrequencyMetric
     multi_gpu_type: MultiGPUType
+    skip_validation: bool=False
+    sample_frequency: int=None
 
     @staticmethod
     def from_yaml(filepath: str) -> TrainingConfig:

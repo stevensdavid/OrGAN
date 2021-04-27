@@ -7,6 +7,7 @@ from os import path
 from pydoc import locate
 from typing import Optional, Tuple, Type
 
+import numpy as np
 import psutil
 import torch
 import torch.cuda
@@ -87,6 +88,12 @@ def parse_args() -> Tuple[Namespace, dict]:
     parser.add_argument("--optimizer", choices=["adam", "sgd", "rmsprop"])
     parser.add_argument("--discriminator_lr", type=float, default=1e-3)
     parser.add_argument("--generator_lr", type=float, default=1e-3)
+    parser.add_argument("--skip_validation", action="store_true")
+    parser.add_argument(
+        "--sample_frequency",
+        type=int,
+        help="How often to sample images during training. Measured in iterations.",
+    )
     parser.add_argument(
         "--generator_lr_factor",
         type=int,
@@ -375,11 +382,39 @@ def train(gpu: int, args: Namespace, train_conf: TrainingConfig):
                     discriminator_loss.to_plain_datatypes(),
                 )
             step += 1
+            if (
+                train_conf.sample_frequency
+                and step % train_conf.sample_frequency == 0
+                and rank == 0
+            ):
+                with torch.no_grad():
+                    image_idxs = np.random.randint(len(val_dataset), size=(10,))
+                    images, labels = [], []
+                    for idx in image_idxs:
+                        image, label = val_dataset[idx]
+                        images.append(image)
+                        labels.append(label)
+                    images = torch.stack(images)
+                    labels = torch.stack(labels)
+                    target_labels = val_dataset.random_targets((images.shape[0],))
+                    cuda_images = images.to(device, non_blocking=True)
+                    targets = target_labels.to(device, non_blocking=True)
+                    targets = generator_labels(targets)
+                    results = model.module.generator.transform(
+                        cuda_images, targets
+                    ).cpu()
+                    examples = val_dataset.stitch_examples(
+                        images, labels, results, target_labels
+                    )
+                    loss_logger.track_images(examples)
             if step % checkpoint_frequency == 0 and rank == 0:
                 os.makedirs(checkpoint_dir, exist_ok=True)
                 save_optimizers(generator_opt, discriminator_opt, step, checkpoint_dir)
                 loss_logger.save(checkpoint_dir, step)
                 model.module.save_checkpoint(step, checkpoint_dir)
+        if train_conf.skip_validation:
+            # Remainder of loop is validation
+            continue
         # Validate
         if use_ddp:
             dist.barrier()
