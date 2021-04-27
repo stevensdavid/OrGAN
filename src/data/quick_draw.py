@@ -98,11 +98,12 @@ class BinaryQuickDraw(AbstractDataset):
         x = x / 255
         if self.normalize_images:
             x = self.normalize(x)
+        x = torch.tensor(x, dtype=torch.float32)
+        x = torch.unsqueeze(x, 0)  # Add channel dimension
         y = self.labels[index]
-        return (
-            torch.tensor(x, dtype=torch.float32),
-            torch.tensor([y], dtype=torch.float32),
-        )
+        y = torch.tensor(y, dtype=torch.float32)
+        y = torch.unsqueeze(y, 0)
+        return x, y
 
     def _len(self) -> int:
         if self.mode is DataSplit.TRAIN:
