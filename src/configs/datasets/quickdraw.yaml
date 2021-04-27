@@ -1,0 +1,7 @@
+class: data.quick_draw.BinaryQuickDraw
+kwargs:
+  root: /storage/data/quickdraw
+  classes:
+    - cat
+    - dog
+  normalize: true
