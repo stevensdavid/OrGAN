@@ -19,7 +19,7 @@ class BinaryQuickDraw(AbstractDataset):
         self.log = logging.getLogger("QuickDraw")
         self.root = root
         self.classes = classes
-        self.normalize = normalize
+        self.normalize_images = normalize
         self.n_classes = len(classes)
         self.max_label = self.n_classes - 1
         if not os.path.exists(root):
@@ -96,7 +96,7 @@ class BinaryQuickDraw(AbstractDataset):
         index += offset
         x = self.images[index]
         x = x / 255
-        if self.normalize:
+        if self.normalize_images:
             x = self.normalize(x)
         y = self.labels[index]
         return (
