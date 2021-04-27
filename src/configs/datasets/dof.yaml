@@ -1,0 +1,5 @@
+class: data.dof.DepthOfField
+kwargs:
+  mirflickr_root: /storage/data/mirflickr
+  unsplash_root: /storage/data/unsplash
+  image_size: 256
