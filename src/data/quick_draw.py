@@ -5,6 +5,7 @@ from typing import List, Tuple
 import numpy as np
 import requests
 import torch
+from torch import nn
 from util.dataclasses import DataShape, LabelDomain
 from util.enums import DataSplit
 
@@ -39,6 +40,7 @@ class BinaryQuickDraw(AbstractDataset):
         self.len_val = int(np.floor(0.15 * n_images))
         self.len_test = int(np.ceil(0.15 * n_images))
         self.mode = DataSplit.TRAIN
+        self.pad = nn.ZeroPad2d(2)
 
     def _load_images(self) -> np.ndarray:
         return np.load(self._get_image_path())
@@ -96,10 +98,11 @@ class BinaryQuickDraw(AbstractDataset):
         index += offset
         x = self.images[index]
         x = x / 255
-        if self.normalize_images:
-            x = self.normalize(x)
         x = torch.tensor(x, dtype=torch.float32)
         x = torch.unsqueeze(x, 0)  # Add channel dimension
+        x = self.pad(x)
+        if self.normalize_images:
+            x = self.normalize(x)
         y = self.labels[index]
         y = torch.tensor(y, dtype=torch.float32)
         y = torch.unsqueeze(y, 0)
