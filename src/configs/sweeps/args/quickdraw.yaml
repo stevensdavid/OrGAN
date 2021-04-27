@@ -1,7 +1,5 @@
 epochs: 300000
-batch_size: 600
-data_config: configs/datasets/non_cyclical_hsv.yaml
-checkpoint_dir: /storage/checkpoints
+data_config: configs/datasets/quickdraw.yaml
 experiment_name: QuickDraw
 train_config: "configs/training.yaml"
 model: models.ccgan.CCStarGAN
