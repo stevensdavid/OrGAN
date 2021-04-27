@@ -27,21 +27,12 @@ from torch.utils.data import DataLoader
 from tqdm import trange
 from util.cyclical_encoding import to_cyclical
 from util.dataclasses import DataclassExtensions, TrainingConfig
-from util.enums import (
-    DataSplit,
-    FrequencyMetric,
-    MultiGPUType,
-    ReductionType,
-    VicinityType,
-)
+from util.enums import (DataSplit, FrequencyMetric, MultiGPUType,
+                        ReductionType, VicinityType)
 from util.logging import Logger
 from util.object_loader import build_from_yaml, load_yaml
-from util.pytorch_utils import (
-    load_optimizer_weights,
-    save_optimizers,
-    seed_worker,
-    set_seeds,
-)
+from util.pytorch_utils import (load_optimizer_weights, save_optimizers,
+                                seed_worker, set_seeds)
 
 
 def parse_args() -> Tuple[Namespace, dict]:
@@ -413,6 +404,10 @@ def train(gpu: int, args: Namespace, train_conf: TrainingConfig):
                 save_optimizers(generator_opt, discriminator_opt, step, checkpoint_dir)
                 loss_logger.save(checkpoint_dir, step)
                 model.module.save_checkpoint(step, checkpoint_dir)
+
+        if rank == 0:
+            loss_logger.track_summary_metric("epoch", epoch)
+
         if train_conf.skip_validation:
             # Remainder of loop is validation
             continue
@@ -492,7 +487,6 @@ def train(gpu: int, args: Namespace, train_conf: TrainingConfig):
                 val_performance,
                 prefix="" if val_dataset.has_performance_metrics() else "val_",
             )
-            loss_logger.track_summary_metric("epoch", epoch)
     # Training finished
     if rank == 0:
         model.module.save_checkpoint(step, checkpoint_dir)
