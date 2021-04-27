@@ -34,7 +34,10 @@ class AbstractDataset(Dataset, ABC):
         self, real_images, real_labels, fake_images, fake_labels
     ) -> List[GeneratedExamples]:
         def stitch_image(real, fake):
-            merged = np.concatenate((real_images, fake_images), axis=2)
+            if real.shape[0] == 1:
+                real = torch.repeat_interleave(real, 3, dim=0)
+                fake = torch.repeat_interleave(fake, 3, dim=0)
+            merged = np.concatenate((real, fake), axis=2)
             return np.moveaxis(merged, 0, -1)  # move channels to end
 
         return [
@@ -43,7 +46,7 @@ class AbstractDataset(Dataset, ABC):
                 real_images, fake_images, real_labels, fake_labels
             )
         ]
-    
+
     def normalize(self, x: np.ndarray) -> np.ndarray:
         """Scale from [0,1] to [-1,1]
 

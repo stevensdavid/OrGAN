@@ -400,9 +400,10 @@ def train(gpu: int, args: Namespace, train_conf: TrainingConfig):
                     cuda_images = images.to(device, non_blocking=True)
                     targets = target_labels.to(device, non_blocking=True)
                     targets = generator_labels(targets)
-                    results = model.module.generator.transform(
-                        cuda_images, targets
-                    ).cpu()
+                    with autocast():
+                        results = model.module.generator.transform(
+                            cuda_images, targets
+                        ).cpu()
                     examples = val_dataset.stitch_examples(
                         images, labels, results, target_labels
                     )
@@ -432,6 +433,7 @@ def train(gpu: int, args: Namespace, train_conf: TrainingConfig):
                     sample_weights = torch.ones(real_labels.shape[0])
                 cuda_samples = samples.to(device, non_blocking=True)
                 real_labels = real_labels.to(device, non_blocking=True)
+                sample_weights = sample_weights.to(device, non_blocking=True)
                 for attempt in range(n_attempts):
                     target_labels = val_dataset.random_targets(len(samples))
                     cuda_targets = torch.unsqueeze(target_labels, 1).to(
@@ -460,11 +462,12 @@ def train(gpu: int, args: Namespace, train_conf: TrainingConfig):
                         generator_input_labels = generator_labels(real_labels)
                         discriminator_targets = discriminator_labels(cuda_targets)
                         with autocast():
-                            performance = model.generator_loss(
+                            performance = model.module.generator_loss(
                                 cuda_samples,
                                 discriminator_input_labels,
                                 generator_input_labels,
                                 discriminator_targets,
+                                generator_targets,
                                 sample_weights,
                             )
                     total_performance = performance + total_performance
@@ -476,6 +479,11 @@ def train(gpu: int, args: Namespace, train_conf: TrainingConfig):
         val_performance = total_performance / (len(val_dataset) * n_attempts)
         # Log the last batch of images
         if rank == 0:
+            if not val_dataset.has_performance_metrics():
+                # TODO: clean this
+                generated = model.module.generator.transform(
+                    cuda_samples, generator_targets
+                )
             examples = val_dataset.stitch_examples(
                 samples[:10], real_labels[:10], generated[:10].cpu(), target_labels[:10]
             )
