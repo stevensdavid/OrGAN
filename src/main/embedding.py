@@ -108,11 +108,12 @@ def train_or_load_feature_extractor(
     data_loader: DataLoader,
     device: torch.device,
     n_labels: int,
+    n_channels: int,
     patience: int,
     save_path: str,
     cyclical: bool = False,
 ) -> ConvLabelClassifier:
-    model = ConvLabelClassifier(embedding_dim, n_labels=n_labels)
+    model = ConvLabelClassifier(embedding_dim, n_labels=n_labels, n_channels=n_channels)
     if os.path.exists(save_path):
         LOG.info("Returning pretrained ResNet")
         model.load_state_dict(torch.load(save_path))
@@ -204,6 +205,7 @@ def train_or_load_embedding(
         data_loader,
         device,
         n_labels,
+        data_shape.n_channels,
         patience,
         resnet_path,
         cyclical,
