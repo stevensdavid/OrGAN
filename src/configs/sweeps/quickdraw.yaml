@@ -12,7 +12,7 @@ early_terminate:
   type: hyperband
   min_iter: 25
 metric:
-  name: rgb_l1
+  name: Generator.total
   goal: minimize
 parameters:
   l_rec:
