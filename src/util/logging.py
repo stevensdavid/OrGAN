@@ -56,9 +56,9 @@ class Logger:
             self.summary[metric_name] = value
         wandb.log({metric_name: value}, step=self.steps, commit=False)
 
-    def track_images(self, examples: List[GeneratedExamples]) -> None:
+    def track_images(self, examples: List[GeneratedExamples], label="examples") -> None:
         wandb.log(
-            {"examples": [wandb.Image(x.image, caption=x.label) for x in examples]},
+            {label: [wandb.Image(x.image, caption=x.label) for x in examples]},
             commit=False,
         )
 
