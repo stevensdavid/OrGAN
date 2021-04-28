@@ -313,6 +313,7 @@ def train(gpu: int, args: Namespace, train_conf: TrainingConfig):
             )
         return outputs
 
+    label_domain = train_dataset.label_domain()
     for epoch in trange(args.epochs, desc="Epoch", disable=rank != 0):
         model.module.set_train()
         for samples, labels in iter(train_data):
@@ -333,7 +334,6 @@ def train(gpu: int, args: Namespace, train_conf: TrainingConfig):
                 if args.cyclical:
                     labels %= 1
                 else:
-                    label_domain = train_dataset.label_domain()
                     if label_domain is not None:
                         labels = torch.clamp(labels, label_domain.min, label_domain.max)
             raw_labels = labels
@@ -415,20 +415,21 @@ def train(gpu: int, args: Namespace, train_conf: TrainingConfig):
                         images, labels, results, target_labels
                     )
                     loss_logger.track_images(examples)
-                    interpolations = []
-                    for cuda_image, image, label in zip(cuda_images, images, labels):
-                        interpolation = interpolate(
-                            cuda_image,
-                            label_domain.min,
-                            label_domain.max,
-                            args.interpolation_steps,
-                        ).cpu()
-                        interpolations.append(
-                            val_dataset.stitch_interpolations(
-                                image, interpolation, label, label_domain
+                    if label_domain is not None:
+                        interpolations = []
+                        for cuda_image, image, label in zip(cuda_images, images, labels):
+                            interpolation = interpolate(
+                                cuda_image,
+                                label_domain.min,
+                                label_domain.max,
+                                args.interpolation_steps,
+                            ).cpu()
+                            interpolations.append(
+                                val_dataset.stitch_interpolations(
+                                    image, interpolation, label, label_domain
+                                )
                             )
-                        )
-                    loss_logger.track_images(interpolations, label="interpolations")
+                        loss_logger.track_images(interpolations, label="interpolations")
             if step % checkpoint_frequency == 0 and rank == 0:
                 os.makedirs(checkpoint_dir, exist_ok=True)
                 save_optimizers(generator_opt, discriminator_opt, step, checkpoint_dir)
@@ -517,17 +518,21 @@ def train(gpu: int, args: Namespace, train_conf: TrainingConfig):
                 val_performance,
                 prefix="" if val_dataset.has_performance_metrics() else "val_",
             )
-            interpolations = []
-            for cuda_image, label in zip(cuda_samples[:10], real_labels[:10]):
-                interpolation = interpolate(
-                    cuda_image, label_domain.min, label_domain.max, args.interpolation_steps,
-                ).cpu()
-                interpolations.append(
-                    val_dataset.stitch_interpolations(
-                        cuda_image, interpolation, label, label_domain
+            if label_domain is not None:
+                interpolations = []
+                for cuda_image, label in zip(cuda_samples[:10], real_labels[:10]):
+                    interpolation = interpolate(
+                        cuda_image,
+                        label_domain.min,
+                        label_domain.max,
+                        args.interpolation_steps,
+                    ).cpu()
+                    interpolations.append(
+                        val_dataset.stitch_interpolations(
+                            cuda_image, interpolation, label, label_domain
+                        )
                     )
-                )
-            loss_logger.track_images(interpolations, label="interpolations")
+                loss_logger.track_images(interpolations, label="interpolations")
     # Training finished
     if rank == 0:
         model.module.save_checkpoint(step, checkpoint_dir)
