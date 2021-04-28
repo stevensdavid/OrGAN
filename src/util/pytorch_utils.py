@@ -1,5 +1,6 @@
 import os
 import random
+from typing import List
 
 import numpy as np
 import torch
@@ -22,7 +23,7 @@ class ConditionalInstanceNorm2d(nn.Module):
         return out
 
 
-def stitch_images(images):
+def stitch_images(images: List[torch.Tensor]) -> np.ndarray:
     for idx, image in enumerate(images):
         if image.shape[0] == 1:
             images[idx] = torch.repeat_interleave(image, 3, dim=0)

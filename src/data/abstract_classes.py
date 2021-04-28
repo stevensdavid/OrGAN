@@ -35,7 +35,7 @@ class AbstractDataset(Dataset, ABC):
         self, real_images, real_labels, fake_images, fake_labels
     ) -> List[GeneratedExamples]:
         return [
-            GeneratedExamples(stitch_images((real, fake)), f"{label} to {target}")
+            GeneratedExamples(stitch_images([real, fake]), f"{label} to {target}")
             for real, fake, label, target in zip(
                 real_images, fake_images, real_labels, fake_labels
             )
@@ -48,7 +48,8 @@ class AbstractDataset(Dataset, ABC):
         source_label: float,
         domain: LabelDomain,
     ) -> GeneratedExamples:
-        stitched_interpolations = stitch_images(interpolations)
+        stitched_interpolations = stitch_images(list(torch.unbind(interpolations)))
+        stitched_interpolations = np.moveaxis(stitched_interpolations, 2, 0)
         return GeneratedExamples(
             stitch_images([source_image, stitched_interpolations]),
             label=f"{source_label} to [{domain.min}, {domain.max}]",

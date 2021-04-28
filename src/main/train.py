@@ -309,7 +309,7 @@ def train(gpu: int, args: Namespace, train_conf: TrainingConfig):
         target_labels = generator_labels(target_labels)
         with autocast():
             outputs = model.module.generator.transform(
-                input_image.repeat(steps, -1, -1, -1), target_labels,
+                input_image.expand(steps, -1, -1, -1), target_labels,
             )
         return outputs
 
@@ -398,8 +398,8 @@ def train(gpu: int, args: Namespace, train_conf: TrainingConfig):
                     image_idxs = np.random.randint(len(val_dataset), size=(10,))
                     images, labels = [], []
                     for idx in image_idxs:
-                        image, label = val_dataset[idx]
-                        images.append(image)
+                        cuda_image, label = val_dataset[idx]
+                        images.append(cuda_image)
                         labels.append(label)
                     images = torch.stack(images)
                     labels = torch.stack(labels)
@@ -416,9 +416,9 @@ def train(gpu: int, args: Namespace, train_conf: TrainingConfig):
                     )
                     loss_logger.track_images(examples)
                     interpolations = []
-                    for image, label in zip(cuda_images, labels):
+                    for cuda_image, image, label in zip(cuda_images, images, labels):
                         interpolation = interpolate(
-                            image,
+                            cuda_image,
                             label_domain.min,
                             label_domain.max,
                             args.interpolation_steps,
@@ -518,13 +518,13 @@ def train(gpu: int, args: Namespace, train_conf: TrainingConfig):
                 prefix="" if val_dataset.has_performance_metrics() else "val_",
             )
             interpolations = []
-            for image, label in zip(cuda_samples[:10], real_labels[:10]):
+            for cuda_image, label in zip(cuda_samples[:10], real_labels[:10]):
                 interpolation = interpolate(
-                    image, label_domain.min, label_domain.max, args.interpolation_steps,
+                    cuda_image, label_domain.min, label_domain.max, args.interpolation_steps,
                 ).cpu()
                 interpolations.append(
                     val_dataset.stitch_interpolations(
-                        image, interpolation, label, label_domain
+                        cuda_image, interpolation, label, label_domain
                     )
                 )
             loss_logger.track_images(interpolations, label="interpolations")
