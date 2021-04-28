@@ -22,6 +22,14 @@ class ConditionalInstanceNorm2d(nn.Module):
         return out
 
 
+def stitch_images(images):
+    for idx, image in enumerate(images):
+        if image.shape[0] == 1:
+            images[idx] = torch.repeat_interleave(image, 3, dim=0)
+    merged = np.concatenate(images, axis=2)
+    return np.moveaxis(merged, 0, -1)  # move channels to end
+
+
 def count_parameters(model):
     return sum(p.numel() for p in model.parameters() if p.requires_grad)
 

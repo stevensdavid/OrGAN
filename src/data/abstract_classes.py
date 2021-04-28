@@ -6,6 +6,7 @@ import torch
 from torch.utils.data import Dataset
 from util.dataclasses import DataShape, GeneratedExamples, LabelDomain
 from util.enums import DataSplit
+from util.pytorch_utils import stitch_images
 
 
 class AbstractDataset(Dataset, ABC):
@@ -33,15 +34,8 @@ class AbstractDataset(Dataset, ABC):
     def stitch_examples(
         self, real_images, real_labels, fake_images, fake_labels
     ) -> List[GeneratedExamples]:
-        def stitch_image(real, fake):
-            if real.shape[0] == 1:
-                real = torch.repeat_interleave(real, 3, dim=0)
-                fake = torch.repeat_interleave(fake, 3, dim=0)
-            merged = np.concatenate((real, fake), axis=2)
-            return np.moveaxis(merged, 0, -1)  # move channels to end
-
         return [
-            GeneratedExamples(stitch_image(real, fake), f"{label} to {target}")
+            GeneratedExamples(stitch_images((real, fake)), f"{label} to {target}")
             for real, fake, label, target in zip(
                 real_images, fake_images, real_labels, fake_labels
             )
