@@ -41,6 +41,19 @@ class AbstractDataset(Dataset, ABC):
             )
         ]
 
+    def stitch_interpolations(
+        self,
+        source_image: torch.Tensor,
+        interpolations: torch.Tensor,
+        source_label: float,
+        domain: LabelDomain,
+    ) -> GeneratedExamples:
+        stitched_interpolations = stitch_images(interpolations)
+        return GeneratedExamples(
+            stitch_images([source_image, stitched_interpolations]),
+            label=f"{source_label} to [{domain.min}, {domain.max}]",
+        )
+
     def normalize(self, x: np.ndarray) -> np.ndarray:
         """Scale from [0,1] to [-1,1]
 

@@ -19,14 +19,14 @@ from coolname import generate_slug
 from data.abstract_classes import AbstractDataset
 from data.ccgan_wrapper import CcGANDatasetWrapper
 from data.fashion_mnist import HSVFashionMNIST
-from models.abstract_model import AbstractI2I
+from models.abstract_model import AbstractGenerator, AbstractI2I
 from models.ccgan import LabelEmbedding
 from torch import nn, optim
 from torch.cuda.amp import GradScaler, autocast
 from torch.utils.data import DataLoader
 from tqdm import trange
 from util.cyclical_encoding import to_cyclical
-from util.dataclasses import DataclassExtensions, TrainingConfig
+from util.dataclasses import DataclassExtensions, LabelDomain, TrainingConfig
 from util.enums import (DataSplit, FrequencyMetric, MultiGPUType,
                         ReductionType, VicinityType)
 from util.logging import Logger
@@ -90,6 +90,7 @@ def parse_args() -> Tuple[Namespace, dict]:
         type=int,
         help="Makes G lr x times higher than discriminator",
     )
+    parser.add_argument("--interpolation_steps", type=int, default=10)
     args, unknown = parser.parse_known_args()
     hyperparams = {}
     if unknown:
@@ -297,6 +298,21 @@ def train(gpu: int, args: Namespace, train_conf: TrainingConfig):
         with torch.no_grad():
             return embedding(y).detach() if args.embed_discriminator else y
 
+    def interpolate(
+        input_image: torch.Tensor, min: float, max: float, steps: int
+    ) -> torch.Tensor:
+        input_image = input_image.to(device)
+        labels = torch.linspace(min, max, steps, device=device)
+        target_labels = labels.view(-1, 1)
+        if args.cyclical:
+            target_labels = to_cyclical(target_labels)
+        target_labels = generator_labels(target_labels)
+        with autocast():
+            outputs = model.module.generator.transform(
+                input_image.repeat(steps, -1, -1, -1), target_labels,
+            )
+        return outputs
+
     for epoch in trange(args.epochs, desc="Epoch", disable=rank != 0):
         model.module.set_train()
         for samples, labels in iter(train_data):
@@ -399,6 +415,20 @@ def train(gpu: int, args: Namespace, train_conf: TrainingConfig):
                         images, labels, results, target_labels
                     )
                     loss_logger.track_images(examples)
+                    interpolations = []
+                    for image, label in zip(cuda_images, labels):
+                        interpolation = interpolate(
+                            image,
+                            label_domain.min,
+                            label_domain.max,
+                            args.interpolation_steps,
+                        ).cpu()
+                        interpolations.append(
+                            val_dataset.stitch_interpolations(
+                                image, interpolation, label, label_domain
+                            )
+                        )
+                    loss_logger.track_images(interpolations, label="interpolations")
             if step % checkpoint_frequency == 0 and rank == 0:
                 os.makedirs(checkpoint_dir, exist_ok=True)
                 save_optimizers(generator_opt, discriminator_opt, step, checkpoint_dir)
@@ -487,6 +517,17 @@ def train(gpu: int, args: Namespace, train_conf: TrainingConfig):
                 val_performance,
                 prefix="" if val_dataset.has_performance_metrics() else "val_",
             )
+            interpolations = []
+            for image, label in zip(cuda_samples[:10], real_labels[:10]):
+                interpolation = interpolate(
+                    image, label_domain.min, label_domain.max, args.interpolation_steps,
+                ).cpu()
+                interpolations.append(
+                    val_dataset.stitch_interpolations(
+                        image, interpolation, label, label_domain
+                    )
+                )
+            loss_logger.track_images(interpolations, label="interpolations")
     # Training finished
     if rank == 0:
         model.module.save_checkpoint(step, checkpoint_dir)
