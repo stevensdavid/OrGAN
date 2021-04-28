@@ -27,12 +27,21 @@ from torch.utils.data import DataLoader
 from tqdm import trange
 from util.cyclical_encoding import to_cyclical
 from util.dataclasses import DataclassExtensions, LabelDomain, TrainingConfig
-from util.enums import (DataSplit, FrequencyMetric, MultiGPUType,
-                        ReductionType, VicinityType)
+from util.enums import (
+    DataSplit,
+    FrequencyMetric,
+    MultiGPUType,
+    ReductionType,
+    VicinityType,
+)
 from util.logging import Logger
 from util.object_loader import build_from_yaml, load_yaml
-from util.pytorch_utils import (load_optimizer_weights, save_optimizers,
-                                seed_worker, set_seeds)
+from util.pytorch_utils import (
+    load_optimizer_weights,
+    save_optimizers,
+    seed_worker,
+    set_seeds,
+)
 
 
 def parse_args() -> Tuple[Namespace, dict]:
@@ -307,7 +316,7 @@ def train(gpu: int, args: Namespace, train_conf: TrainingConfig):
         if args.cyclical:
             target_labels = to_cyclical(target_labels)
         target_labels = generator_labels(target_labels)
-        with autocast():
+        with autocast(), torch.no_grad():
             outputs = model.module.generator.transform(
                 input_image.expand(steps, -1, -1, -1), target_labels,
             )
@@ -417,7 +426,9 @@ def train(gpu: int, args: Namespace, train_conf: TrainingConfig):
                     loss_logger.track_images(examples)
                     if label_domain is not None:
                         interpolations = []
-                        for cuda_image, image, label in zip(cuda_images, images, labels):
+                        for cuda_image, image, label in zip(
+                            cuda_images, images, labels
+                        ):
                             interpolation = interpolate(
                                 cuda_image,
                                 label_domain.min,
@@ -520,7 +531,9 @@ def train(gpu: int, args: Namespace, train_conf: TrainingConfig):
             )
             if label_domain is not None:
                 interpolations = []
-                for cuda_image, label in zip(cuda_samples[:10], real_labels[:10]):
+                for cuda_image, image, label in zip(
+                    cuda_samples[:10], samples[:10], real_labels[:10]
+                ):
                     interpolation = interpolate(
                         cuda_image,
                         label_domain.min,
@@ -529,7 +542,7 @@ def train(gpu: int, args: Namespace, train_conf: TrainingConfig):
                     ).cpu()
                     interpolations.append(
                         val_dataset.stitch_interpolations(
-                            cuda_image, interpolation, label, label_domain
+                            image, interpolation, label, label_domain
                         )
                     )
                 loss_logger.track_images(interpolations, label="interpolations")
