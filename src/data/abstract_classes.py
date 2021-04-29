@@ -12,7 +12,7 @@ from util.pytorch_utils import stitch_images
 class AbstractDataset(Dataset, ABC):
     def __init__(self) -> None:
         super().__init__()
-        self.mode: DataSplit = None
+        self.mode: DataSplit = DataSplit.TRAIN
 
     @abstractmethod
     def random_targets(self, shape: torch.Size) -> torch.Tensor:

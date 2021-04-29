@@ -39,7 +39,6 @@ class BinaryQuickDraw(AbstractDataset):
         self.len_train = int(np.floor(0.7 * n_images))
         self.len_val = int(np.floor(0.15 * n_images))
         self.len_test = int(np.ceil(0.15 * n_images))
-        self.mode = DataSplit.TRAIN
         self.pad = nn.ZeroPad2d(2)
 
     def _load_images(self) -> np.ndarray:
