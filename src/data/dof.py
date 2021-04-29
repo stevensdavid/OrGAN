@@ -93,7 +93,7 @@ class DepthOfField(AbstractDataset):
             image = self.train_transform(image)
         else:
             image = self.val_transform(image)
-        label = torch.tensor(label, dtype=torch.float32)
+        label = torch.tensor([label], dtype=torch.float32)
         image = self.normalize(image)
         label = self.normalize_label(label)
         return image, label
