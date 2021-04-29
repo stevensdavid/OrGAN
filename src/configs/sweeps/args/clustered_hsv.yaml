@@ -11,6 +11,6 @@ n_gpus: 2
 n_workers: 5
 node_rank: 0
 embed_generator: True
-embed_discriminator: True
+embed_discriminator: false
 ccgan_embedding_file: /storage/embeddings/clustered_hsv/embedding.pt
 ccgan_embedding_dim: 128
