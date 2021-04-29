@@ -4,7 +4,7 @@ kwargs:
   train: true
   download: true
   n_clusters: 5
-  noisy_labels: true
+  noisy_labels: false
   cyclical: false
   min_hue: 0.0
   max_hue: 0.5 # only use half of hue range to avoid cycle
