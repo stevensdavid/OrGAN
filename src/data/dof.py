@@ -56,7 +56,7 @@ class DepthOfField(AbstractDataset):
             self.logger.info(f"Preprocessing {data_name}")
             with open(os.path.join(data_dir, label_filename), "r") as f:
                 file_label_mapping = json.load(f)
-            for name, f_stop in file_label_mapping.keys():
+            for name, f_stop in file_label_mapping.items():
                 if 0.5 <= f_stop <= 32:
                     all_images.append(os.path.join(data_dir, "images", f"{name}.jpg"))
                     all_labels.append(f_stop)
