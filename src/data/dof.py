@@ -1,4 +1,5 @@
 import json
+import logging
 import os
 from typing import List, Tuple
 
@@ -16,6 +17,7 @@ class DepthOfField(AbstractDataset):
     def __init__(self, mirflickr_root: str, unsplash_root: str, image_size=500) -> None:
         super().__init__()
         self.images, self.labels = self.preprocess(mirflickr_root, unsplash_root)
+        self.logger = logging.getLogger("DepthOfField")
         num_images = len(self.labels)
         # Four splits to support training auxiliary classifiers, etc. 55-15-15-15
         self.len_train = int(np.floor(0.55 * num_images))
@@ -47,14 +49,17 @@ class DepthOfField(AbstractDataset):
         label_filename = "f_stops.json"
         all_images = []
         all_labels = []
-        for data_dir in [mirflickr_root, unsplash_root]:
+        for data_dir, data_name in [
+            (mirflickr_root, "MIRFLICKR"),
+            (unsplash_root, "unsplash"),
+        ]:
+            self.logger.info(f"Preprocessing {data_name}")
             with open(os.path.join(data_dir, label_filename), "r") as f:
                 file_label_mapping = json.load(f)
-            all_images += [
-                os.path.join(data_dir, "images", f"{name}.jpg")
-                for name in file_label_mapping.keys()
-            ]
-            all_labels += file_label_mapping.values()
+            for name, f_stop in file_label_mapping.keys():
+                if 0.5 <= f_stop <= 32:
+                    all_images.append(os.path.join(data_dir, "images", f"{name}.jpg"))
+                    all_labels.append(f_stop)
         return all_images, all_labels
 
     def random_targets(self, shape: torch.Size) -> torch.Tensor:
