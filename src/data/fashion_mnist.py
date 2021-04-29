@@ -81,9 +81,12 @@ class HSVFashionMNIST(FashionMNIST, AbstractDataset):
             ys = np.repeat(ys, total_samples // len(ys))
             np.random.shuffle(ys)
             self.ys = ys
-            self.hues = ys + np.random.normal(
-                size=ys.shape, scale=(self.max_hue - self.min_hue) / (n_clusters * 10)
-            )
+            if self.noisy_labels:
+                self.hues = ys + np.random.normal(
+                    size=ys.shape, scale=(self.max_hue - self.min_hue) / (n_clusters * 10)
+                )
+            else:
+                self.hues = ys
             if self.cyclical:
                 self.hues %= 1
         self.pad = nn.ZeroPad2d(2)
