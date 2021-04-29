@@ -16,8 +16,8 @@ from data.abstract_classes import AbstractDataset
 class DepthOfField(AbstractDataset):
     def __init__(self, mirflickr_root: str, unsplash_root: str, image_size=500) -> None:
         super().__init__()
-        self.images, self.labels = self.preprocess(mirflickr_root, unsplash_root)
         self.logger = logging.getLogger("DepthOfField")
+        self.images, self.labels = self.preprocess(mirflickr_root, unsplash_root)
         num_images = len(self.labels)
         # Four splits to support training auxiliary classifiers, etc. 55-15-15-15
         self.len_train = int(np.floor(0.55 * num_images))
