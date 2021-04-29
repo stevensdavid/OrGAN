@@ -23,11 +23,11 @@ class ConditionalInstanceNorm2d(nn.Module):
         return out
 
 
-def stitch_images(images: List[torch.Tensor]) -> np.ndarray:
+def stitch_images(images: List[torch.Tensor], dim=2) -> np.ndarray:
     for idx, image in enumerate(images):
         if image.shape[0] == 1:
             images[idx] = torch.repeat_interleave(image, 3, dim=0)
-    merged = np.concatenate(images, axis=2)
+    merged = np.concatenate(images, axis=dim)
     return np.moveaxis(merged, 0, -1)  # move channels to end
 
 

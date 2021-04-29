@@ -83,7 +83,8 @@ class HSVFashionMNIST(FashionMNIST, AbstractDataset):
             self.ys = ys
             if self.noisy_labels:
                 self.hues = ys + np.random.normal(
-                    size=ys.shape, scale=(self.max_hue - self.min_hue) / (n_clusters * 10)
+                    size=ys.shape,
+                    scale=(self.max_hue - self.min_hue) / (n_clusters * 10),
                 )
             else:
                 self.hues = ys
@@ -240,11 +241,34 @@ class HSVFashionMNIST(FashionMNIST, AbstractDataset):
     def stitch_examples(self, real_images, real_labels, fake_images, fake_labels):
         return [
             GeneratedExamples(
-                stitch_images([real, fake, self.ground_truth(real, target)]),
+                self.denormalize(
+                    stitch_images([real, fake, self.ground_truth(real, target)])
+                ),
                 f"H={target}",
             )
             for real, fake, target in zip(real_images, fake_images, fake_labels)
         ]
+
+    def stitch_interpolations(
+        self,
+        source_image: torch.Tensor,
+        interpolations: torch.Tensor,
+        source_label: float,
+        domain: LabelDomain,
+    ) -> GeneratedExamples:
+        model_interps = stitch_images(
+            [source_image] + list(torch.unbind(interpolations))
+        )
+        domain = self.label_domain()
+        steps = interpolations.shape[0]
+        targets = torch.linspace(domain.min, domain.max, steps)
+        ground_truths = [self.ground_truth(source_image, y) for y in targets]
+        stitched_truths = stitch_images([np.zeros_like(source_image)] + ground_truths)
+        stitched_results = np.concatenate([model_interps, stitched_truths], axis=0)
+        return GeneratedExamples(
+            self.denormalize(stitched_results),
+            label=f"{source_label} to [{domain.min}, {domain.max}]",
+        )
 
 
 if __name__ == "__main__":
