@@ -1,4 +1,4 @@
-g_conv_dim: 32
+g_conv_dim: 64
 g_num_bottleneck: 3
-d_conv_dim: 32
+d_conv_dim: 64
 d_num_scales: 3
