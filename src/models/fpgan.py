@@ -123,7 +123,7 @@ class FPGAN(nn.Module, AbstractI2I):
         **kwargs,
     ) -> GeneratorLoss:
         sample_weights = sample_weights.view(-1, 1, 1, 1)
-        real_sources = self.discriminator(input_image, input_label)
+        real_sources, _ = self.discriminator(input_image)
         average_real = torch.mean(real_sources)
         # Input to target
         fake_image = self.generator.transform(input_image, embedded_target_label)
