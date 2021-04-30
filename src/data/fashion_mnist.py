@@ -44,7 +44,6 @@ class HSVFashionMNIST(FashionMNIST, AbstractDataset):
         fixed_labels: bool = True,
         min_hue: float = 0.0,
         max_hue: float = 1.0,
-        cyclical: bool = True,
     ) -> None:
         super().__init__(
             root,
@@ -58,7 +57,6 @@ class HSVFashionMNIST(FashionMNIST, AbstractDataset):
         self.fixed_labels = fixed_labels
         self.min_hue = min_hue
         self.max_hue = max_hue
-        self.cyclical = cyclical
         # FashionMNIST is split into train and test.
         # Create validation split if we are training
         total_samples = super().__len__()
@@ -74,10 +72,9 @@ class HSVFashionMNIST(FashionMNIST, AbstractDataset):
             self.ys = self.hues
             if noisy_labels:
                 self.ys += np.random.normal(size=self.ys.shape, scale=1e-2)
-                if cyclical:
-                    self.ys %= 1
+                self.ys %= 1
         else:
-            ys = np.linspace(self.min_hue, self.max_hue, num=n_clusters, endpoint=False)
+            ys = np.linspace(self.min_hue, self.max_hue, num=n_clusters, endpoint=True)
             ys = np.repeat(ys, total_samples // len(ys))
             np.random.shuffle(ys)
             self.ys = ys
@@ -86,10 +83,9 @@ class HSVFashionMNIST(FashionMNIST, AbstractDataset):
                     size=ys.shape,
                     scale=(self.max_hue - self.min_hue) / (n_clusters * 10),
                 )
+                self.hues %= 1
             else:
                 self.hues = ys
-            if self.cyclical:
-                self.hues %= 1
         self.pad = nn.ZeroPad2d(2)
 
     def label_domain(self) -> LabelDomain:
