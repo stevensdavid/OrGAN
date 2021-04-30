@@ -23,6 +23,13 @@ class ConditionalInstanceNorm2d(nn.Module):
         return out
 
 
+def relativistic_loss(real_sources, real_average, fake_sources, sample_weights):
+    fake_average = torch.mean(fake_sources)
+    real_loss = torch.mean(sample_weights * (real_sources - fake_average + 1) ** 2)
+    fake_loss = torch.mean((fake_sources - real_average - 1) ** 2)
+    return (real_loss + fake_loss) / 2
+
+
 def stitch_images(images: List[torch.Tensor], dim=2) -> np.ndarray:
     for idx, image in enumerate(images):
         if image.shape[0] == 1:
