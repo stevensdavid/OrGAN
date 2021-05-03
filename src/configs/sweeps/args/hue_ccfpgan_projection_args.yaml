@@ -11,6 +11,6 @@ n_gpus: 2
 n_workers: 5
 node_rank: 0
 embed_generator: True
-ccgan_embedding_file: /storage/checkpoints/embeddings/non_cyclical_hsv/embedding.pt
+ccgan_embedding_file: /storage/embeddings/non_cyclical_hsv/embedding.pt
 ccgan_embedding_dim: 128
 embed_discriminator: True
