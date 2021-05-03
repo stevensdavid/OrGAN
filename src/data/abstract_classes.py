@@ -1,10 +1,11 @@
 from abc import ABC, abstractmethod
-from typing import List, Optional
+from typing import Callable, List, Optional
 
 import numpy as np
 import torch
 from torch.utils.data import Dataset
-from util.dataclasses import DataShape, GeneratedExamples, LabelDomain
+from models.abstract_model import AbstractGenerator
+from util.dataclasses import DataShape, DataclassType, GeneratedExamples, LabelDomain
 from util.enums import DataSplit
 from util.pytorch_utils import stitch_images
 
@@ -30,6 +31,17 @@ class AbstractDataset(Dataset, ABC):
         if self.mode is None:
             raise ValueError("Please call 'set_mode' before using data set")
         return self._getitem(index)
+
+    @abstractmethod
+    def test_model(
+        self,
+        generator: AbstractGenerator,
+        batch_size: int,
+        n_workers: int,
+        device: torch.device,
+        label_transform: Callable[[torch.Tensor], torch.Tensor],
+    ) -> DataclassType:
+        ...
 
     def stitch_examples(
         self, real_images, real_labels, fake_images, fake_labels

@@ -2,13 +2,24 @@ from __future__ import annotations
 
 from dataclasses import astuple, dataclass, fields
 from operator import add, sub
-from typing import Callable, Dict, Union
+from typing import Callable, Dict, List, Union
+import numpy as np
 
 import torch
 from typing_extensions import Protocol
 
 from util.enums import FrequencyMetric, MultiGPUType
 from util.object_loader import load_yaml
+
+
+@dataclass
+class Metric:
+    mean: float
+    stddev: float
+
+    @staticmethod
+    def from_list(l: List):
+        return Metric(mean=np.mean(l), stddev=np.std(l))
 
 
 class DataclassType(Protocol):
@@ -46,6 +57,14 @@ class DataclassExtensions:
     def map(self, op: Callable) -> DataclassType:
         return type(self)(*tuple(map(op, self.to_tuple())))
 
+    def concatenate(self, other: DataclassType) -> DataclassType:
+        return type(self)(
+            *tuple(
+                getattr(self, field.name) + getattr(other, field.name)
+                for field in fields(self)
+            )
+        )
+
 
 @dataclass
 class DataShape:
@@ -62,8 +81,8 @@ class TrainingConfig:
     log_frequency: int
     log_frequency_metric: FrequencyMetric
     multi_gpu_type: MultiGPUType
-    skip_validation: bool=False
-    sample_frequency: int=None
+    skip_validation: bool = False
+    sample_frequency: int = None
 
     @staticmethod
     def from_yaml(filepath: str) -> TrainingConfig:

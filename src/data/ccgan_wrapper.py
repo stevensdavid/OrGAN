@@ -1,11 +1,12 @@
 from collections import defaultdict
-from typing import Optional, Tuple
+from typing import Callable, Optional, Tuple
 
 import numpy as np
 import torch
 from torch import Size, Tensor, tensor
 from torch.utils.data import Dataset
-from util.dataclasses import DataShape, LabelDomain
+from models.abstract_model import AbstractGenerator
+from util.dataclasses import DataShape, DataclassType, LabelDomain
 from util.enums import DataSplit, VicinityType
 
 from data.abstract_classes import AbstractDataset
@@ -109,3 +110,15 @@ class CcGANDatasetWrapper(AbstractDataset):
 
     def label_domain(self) -> Optional[LabelDomain]:
         return self.dataset.label_domain()
+
+    def test_model(
+        self,
+        generator: AbstractGenerator,
+        batch_size: int,
+        n_workers: int,
+        device: torch.device,
+        label_transform: Callable[[torch.Tensor], torch.Tensor],
+    ) -> DataclassType:
+        return self.dataset.test_model(
+            generator, batch_size, n_workers, device, label_transform
+        )

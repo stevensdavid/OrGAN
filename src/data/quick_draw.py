@@ -1,12 +1,13 @@
 import logging
 import os
-from typing import List, Tuple
+from typing import Callable, List, Tuple
 
 import numpy as np
 import requests
 import torch
 from torch import nn
-from util.dataclasses import DataShape, LabelDomain
+from models.abstract_model import AbstractGenerator
+from util.dataclasses import DataShape, DataclassType, LabelDomain
 from util.enums import DataSplit
 
 from data.abstract_classes import AbstractDataset
@@ -127,6 +128,16 @@ class BinaryQuickDraw(AbstractDataset):
 
     def has_performance_metrics(self) -> bool:
         return False
+
+    def test_model(
+        self,
+        generator: AbstractGenerator,
+        batch_size: int,
+        n_workers: int,
+        device: torch.device,
+        label_transform: Callable[[torch.Tensor], torch.Tensor],
+    ) -> DataclassType:
+        raise NotImplementedError()
 
 
 if __name__ == "__main__":

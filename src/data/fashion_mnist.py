@@ -1,33 +1,38 @@
 from dataclasses import dataclass
-from typing import Callable, List, Optional, Tuple
+from typing import Callable, List, Optional, Tuple, Union
 
 import numpy as np
 import skimage.color
 import torch
+from torch.utils.data.dataloader import DataLoader
+from models.abstract_model import AbstractGenerator
 import torch.linalg
 from torch import nn
 from torchvision.datasets import FashionMNIST
 from util.dataclasses import (
     DataclassExtensions,
     DataShape,
+    DataclassType,
     GeneratedExamples,
     LabelDomain,
+    Metric,
 )
 from util.enums import DataSplit, ReductionType
-from util.pytorch_utils import stitch_images
+from util.pytorch_utils import seed_worker, stitch_images
 
 from data.abstract_classes import AbstractDataset
+from tqdm import tqdm
 
 
 @dataclass
 class HSVFashionMNISTPerformance(DataclassExtensions):
-    hsv_mae_h: torch.Tensor
-    hsv_mae_s: torch.Tensor
-    hsv_mae_v: torch.Tensor
-    hsv_l1: torch.Tensor
-    hsv_l2: torch.Tensor
-    rgb_l1: torch.Tensor
-    rgb_l2: torch.Tensor
+    hsv_mae_h: Union[torch.Tensor, Metric]
+    hsv_mae_s: Union[torch.Tensor, Metric]
+    hsv_mae_v: Union[torch.Tensor, Metric]
+    hsv_l1: Union[torch.Tensor, Metric]
+    hsv_l2: Union[torch.Tensor, Metric]
+    rgb_l1: Union[torch.Tensor, Metric]
+    rgb_l2: Union[torch.Tensor, Metric]
 
 
 class HSVFashionMNIST(FashionMNIST, AbstractDataset):
@@ -265,6 +270,43 @@ class HSVFashionMNIST(FashionMNIST, AbstractDataset):
             self.denormalize(stitched_results),
             label=f"{source_label} to [{domain.min}, {domain.max}]",
         )
+
+    def test_model(
+        self,
+        generator: AbstractGenerator,
+        batch_size: int,
+        n_workers: int,
+        device: torch.device,
+        label_transform: Callable[[torch.Tensor], torch.Tensor],
+    ) -> DataclassType:
+        self.set_mode(DataSplit.TEST)
+        data_loader = DataLoader(
+            self,
+            batch_size,
+            shuffle=False,
+            num_workers=n_workers,
+            worker_init_fn=seed_worker,
+        )
+        n_attempts = 100
+        total_performance = HSVFashionMNISTPerformance(*[[]] * 7)
+        for images, labels in tqdm(
+            iter(data_loader), desc="Testing batch", total=len(data_loader)
+        ):
+            for attempt in range(n_attempts):
+                targets = self.random_targets(labels.shape)
+                generator_targets = label_transform(targets.to(device))
+                fakes = generator.transform(images.to(device), generator_targets)
+                batch_performance = self.performance(
+                    images, labels, fakes, targets, ReductionType.NONE
+                )
+                batch_performance = batch_performance.map(
+                    lambda t: t.squeeze().tolist()
+                )
+                if total_performance is None:
+                    total_performance = batch_performance
+                else:
+                    total_performance.concatenate(batch_performance)
+        return total_performance.map(Metric.from_list)
 
 
 if __name__ == "__main__":
