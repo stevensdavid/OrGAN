@@ -14,3 +14,6 @@ embed_generator: True
 ccgan_embedding_file: /storage/embeddings/non_cyclical_hsv/embedding.pt
 ccgan_embedding_dim: 128
 embed_discriminator: True
+generator_lr: -4.0
+discriminator_lr: -4.0
+optimizer: adam
