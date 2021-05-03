@@ -6,26 +6,35 @@ command:
   - ${program}
   - "--args_file"
   - "configs/sweeps/args/hue_ccfpgan_projection_args.yaml"
+  - "--log_hyperparams"
 method: bayes
 early_terminate:
   type: hyperband
   min_iter: 5
 metric:
-  name: val_norm
+  name: rgb_l1
   goal: minimize
 parameters:
   l_rec:
-    min: 0.1
-    max: 10
+    distribution: uniform
+    min: -1
+    max: 1
   l_id:
-    min: 0.1
-    max: 10
-  l_grad_penalty:
-    min: 0.1
-    max: 10
-  ccgan_sigma:
-    min: 0.01
-    max: 0.3
-  ccgan_n_neighbours:
-    min: 1
-    max: 3
+    distribution: uniform
+    min: -1
+    max: 1
+  optimizer:
+    values:
+      - rmsprop
+  discriminator_lr:
+    values:
+      - -2.0
+      - -3.0
+  generator_lr_factor:
+    values:
+      - 1
+      - 3
+  label_noise_variance:
+    distribution: uniform
+    min: -3
+    max: -1
