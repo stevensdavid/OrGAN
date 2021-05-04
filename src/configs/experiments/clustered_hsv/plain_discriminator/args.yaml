@@ -1,4 +1,4 @@
-epochs: 1000
+epochs: 100
 batch_size: 500
 data_config: configs/datasets/non_cyclical_clustered_hsv.yaml
 checkpoint_dir: /storage/checkpoints
