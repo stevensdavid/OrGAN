@@ -6,7 +6,7 @@ command:
   - -m
   - ${program}
   - --args_file
-  - configs/sweeps/args/clustered_hsv.yaml
+  - configs/experiments/continuous_hsv/best/args.yaml
   - --log_hyperparams
 early_terminate:
   min_iter: 10
