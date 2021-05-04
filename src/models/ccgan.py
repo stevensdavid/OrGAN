@@ -9,13 +9,11 @@ from typing import Optional, Tuple, Union
 import torch
 from torch import Tensor, nn
 from torch.cuda.amp import autocast
-from torchvision.models import resnet18, resnet34, resnet50, resnet101, resnet152
+from torchvision.models import (resnet18, resnet34, resnet50, resnet101,
+                                resnet152)
 from util.dataclasses import DataclassExtensions, DataShape
-from util.pytorch_utils import (
-    ConditionalInstanceNorm2d,
-    conv2d_output_size,
-    relativistic_loss,
-)
+from util.pytorch_utils import (ConditionalInstanceNorm2d, conv2d_output_size,
+                                relativistic_loss)
 
 from models import patchgan
 from models.abstract_model import AbstractI2I
@@ -208,6 +206,7 @@ class CCStarGAN(StarGAN):
         d_num_scales: int,
         l_rec: float,
         l_mse: Optional[float] = None,  # Only needed if not ccgan_discriminator
+        embed_generator: bool = False,
         embed_discriminator: bool = False,
         **kwargs,
     ):
@@ -222,7 +221,9 @@ class CCStarGAN(StarGAN):
             l_rec,
             **kwargs,
         )
-        self.generator = CCGenerator(data_shape, g_conv_dim, g_num_bottleneck)
+        self.embed_generator = embed_generator
+        if self.embed_generator:
+            self.generator = CCGenerator(data_shape, g_conv_dim, g_num_bottleneck)
         self.embed_discriminator = embed_discriminator
         if self.embed_discriminator:
             self.discriminator = CCDiscriminator(data_shape, d_conv_dim, d_num_scales)
