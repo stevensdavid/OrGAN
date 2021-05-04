@@ -149,3 +149,22 @@ class StarGAN(nn.Module, AbstractI2I):
             total, real_loss, fake_loss, label_error, reconstruction_loss,
         )
 
+    @staticmethod
+    def load_generator(
+        data_shape,
+        iteration: int,
+        checkpoint_dir: str,
+        map_location,
+        g_conv_dim,
+        g_num_bottleneck,
+        **kwargs,
+    ) -> Generator:
+        return AbstractI2I._load_generator(
+            Generator,
+            data_shape,
+            iteration,
+            checkpoint_dir,
+            map_location,
+            conv_dim=g_conv_dim,
+            num_bottleneck_layers=g_num_bottleneck,
+        )

@@ -1,10 +1,26 @@
 import os
 from abc import ABC, abstractmethod
+from typing import Type
 
 import torch
 from torch import Tensor, nn
 from torch.nn.parameter import Parameter
 from util.dataclasses import DataclassType, DataShape
+
+
+class AbstractGenerator(ABC, nn.Module):
+    @abstractmethod
+    def transform(self, x: Tensor, y: Tensor) -> Tensor:
+        """Transform data to the target label
+
+        Args:
+            x (Tensor): [description]
+            y (Tensor): [description]
+
+        Returns:
+            Tensor: [description]
+        """
+        ...
 
 
 class AbstractI2I(ABC):
@@ -33,7 +49,31 @@ class AbstractI2I(ABC):
 
         Returns:
             DataclassType: [description]
-        """        
+        """
+        ...
+
+    @staticmethod
+    def _load_generator(
+        generator_class: Type,
+        data_shape,
+        iteration: int,
+        checkpoint_dir: str,
+        map_location,
+        **generator_args,
+    ) -> AbstractGenerator:
+        generator = generator_class(data_shape, **generator_args)
+        checkpoint = torch.load(
+            AbstractI2I._make_save_filename(iteration, checkpoint_dir),
+            map_location=map_location,
+        )
+        generator.load_state_dict(checkpoint["G"])
+        return generator
+
+    @staticmethod
+    @abstractmethod
+    def load_generator(
+        data_shape, iteration: int, checkpoint_dir: str, map_location, **kwargs,
+    ) -> AbstractGenerator:
         ...
 
     @abstractmethod
@@ -58,7 +98,7 @@ class AbstractI2I(ABC):
 
         Returns:
             DataclassType: [description]
-        """        
+        """
         ...
 
     def discriminator_params(self) -> torch.nn.parameter.Parameter:
@@ -67,7 +107,8 @@ class AbstractI2I(ABC):
     def generator_params(self) -> torch.nn.parameter.Parameter:
         return self.generator.parameters()
 
-    def _make_save_filename(self, iteration: int, checkpoint_dir: str) -> str:
+    @staticmethod
+    def _make_save_filename(iteration: int, checkpoint_dir: str) -> str:
         return os.path.join(checkpoint_dir, f"step_{iteration}.pt")
 
     def save_checkpoint(self, iteration: int, checkpoint_dir: str) -> None:
@@ -93,21 +134,6 @@ class AbstractI2I(ABC):
     def set_eval(self):
         self.generator.eval()
         self.discriminator.eval()
-
-
-class AbstractGenerator(ABC, nn.Module):
-    @abstractmethod
-    def transform(self, x: Tensor, y: Tensor) -> Tensor:
-        """Transform data to the target label
-
-        Args:
-            x (Tensor): [description]
-            y (Tensor): [description]
-
-        Returns:
-            Tensor: [description]
-        """
-        ...
 
 
 class AbstractDiscriminator(ABC, nn.Module):

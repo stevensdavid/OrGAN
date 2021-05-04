@@ -9,15 +9,14 @@ from typing import Optional, Tuple, Union
 import torch
 from torch import Tensor, nn
 from torch.cuda.amp import autocast
-from torchvision.models import resnet18, resnet34, resnet50, resnet101, resnet152
+from torchvision.models import (resnet18, resnet34, resnet50, resnet101,
+                                resnet152)
 from util.dataclasses import DataclassExtensions, DataShape
-from util.pytorch_utils import (
-    ConditionalInstanceNorm2d,
-    conv2d_output_size,
-    relativistic_loss,
-)
+from util.pytorch_utils import (ConditionalInstanceNorm2d, conv2d_output_size,
+                                relativistic_loss)
 
 from models import patchgan
+from models.abstract_model import AbstractI2I
 from models.fpgan import FPGAN, DiscriminatorLoss, GeneratorLoss
 from models.stargan import StarGAN
 
@@ -305,6 +304,26 @@ class CCStarGAN(StarGAN):
             reconstruction=g_loss_rec,
         )
 
+    @staticmethod
+    def load_generator(
+        data_shape,
+        iteration: int,
+        checkpoint_dir: str,
+        map_location,
+        g_conv_dim,
+        g_num_bottleneck,
+        **kwargs,
+    ) -> CCGenerator:
+        return AbstractI2I._load_generator(
+            CCGenerator,
+            data_shape,
+            iteration,
+            checkpoint_dir,
+            map_location,
+            conv_dim=g_conv_dim,
+            num_bottleneck_layers=g_num_bottleneck,
+        )
+
 
 class CCFPGAN(FPGAN):
     def __init__(
@@ -434,5 +453,25 @@ class CCFPGAN(FPGAN):
             id_loss,
             reconstruction_loss,
             id_reconstruction_loss,
+        )
+
+    @staticmethod
+    def load_generator(
+        data_shape,
+        iteration: int,
+        checkpoint_dir: str,
+        map_location,
+        g_conv_dim,
+        g_num_bottleneck,
+        **kwargs,
+    ) -> CCGenerator:
+        return AbstractI2I._load_generator(
+            CCGenerator,
+            data_shape,
+            iteration,
+            checkpoint_dir,
+            map_location,
+            conv_dim=g_conv_dim,
+            num_bottleneck_layers=g_num_bottleneck,
         )
 
