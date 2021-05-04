@@ -66,9 +66,9 @@ def eval(args: Namespace):
         evaluation = dataset.test_model(
             generator.module, args.batch_size, args.n_workers, device, transform_labels,
         )
-    with open(os.path.join(checkpoint_dir, "test_results.txt")) as f:
+    print(evaluation)
+    with open(os.path.join(checkpoint_dir, "test_results.txt"), "w") as f:
         f.write(str(evaluation))
-        print(evaluation)
 
 
 if __name__ == "__main__":
