@@ -20,7 +20,6 @@ class Hyperparams:
     d_num_scales: int
     l_mse: float
     l_rec: float
-    l_grad_penalty: float
 
 
 @dataclass
@@ -51,7 +50,6 @@ class StarGAN(nn.Module, AbstractI2I):
         d_num_scales: int,
         l_mse: float,
         l_rec: float,
-        l_grad_penalty: float,
         **kwargs,
     ):
         super().__init__()
@@ -64,7 +62,6 @@ class StarGAN(nn.Module, AbstractI2I):
             d_num_scales=d_num_scales,
             l_mse=l_mse,
             l_rec=l_rec,
-            l_grad_penalty=l_grad_penalty,
         )
         self.generator = Generator(
             self.data_shape,
