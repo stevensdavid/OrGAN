@@ -1,5 +1,5 @@
 epochs: 1000
-batch_size: 750
+batch_size: 500
 data_config: configs/datasets/non_cyclical_clustered_hsv.yaml
 checkpoint_dir: /storage/checkpoints
 experiment_name: Clustered_HSV_StarGAN
