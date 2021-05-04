@@ -1,5 +1,5 @@
 name: StarGAN
-project: continuous_hsv
+project: clustered_hsv
 command:
   - ${env}
   - python
