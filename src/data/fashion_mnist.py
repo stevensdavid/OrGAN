@@ -4,15 +4,17 @@ from typing import Callable, List, Optional, Tuple, Union
 import numpy as np
 import skimage.color
 import torch
-from torch.utils.data.dataloader import DataLoader
-from models.abstract_model import AbstractGenerator
 import torch.linalg
+from models.abstract_model import AbstractGenerator
 from torch import nn
+from torch.cuda.amp.autocast_mode import autocast
+from torch.utils.data.dataloader import DataLoader
 from torchvision.datasets import FashionMNIST
+from tqdm import tqdm
 from util.dataclasses import (
     DataclassExtensions,
-    DataShape,
     DataclassType,
+    DataShape,
     GeneratedExamples,
     LabelDomain,
     Metric,
@@ -21,7 +23,6 @@ from util.enums import DataSplit, ReductionType
 from util.pytorch_utils import seed_worker, stitch_images
 
 from data.abstract_classes import AbstractDataset
-from tqdm import tqdm
 
 
 @dataclass
@@ -136,7 +137,7 @@ class HSVFashionMNIST(FashionMNIST, AbstractDataset):
         elif self.mode is DataSplit.VAL:
             return self.len_val
         elif self.mode is DataSplit.TEST:
-            return len(self)
+            return super().__len__()
 
     def random_targets(self, shape: torch.Size) -> torch.Tensor:
         if self.simplified:
@@ -198,7 +199,7 @@ class HSVFashionMNIST(FashionMNIST, AbstractDataset):
         x = self.denormalize(x)
         x = np.moveaxis(x, 1, -1)
         x = skimage.color.rgb2hsv(x)
-        x = np.moveaxis(x, -1, 0)
+        x = np.moveaxis(x, -1, 1)
         return torch.tensor(x, device=t.device)
 
     def performance(
@@ -211,21 +212,21 @@ class HSVFashionMNIST(FashionMNIST, AbstractDataset):
     ) -> HSVFashionMNISTPerformance:
         ground_truths = self.ground_truths(real_images, fake_labels)
         ground_truths = torch.tensor(ground_truths, device=fake_images.device)
-        rgb_l1 = torch.mean(torch.abs(ground_truths - fake_images), dim=0)
-        rgb_l2 = torch.linalg.norm(ground_truths - fake_images, dim=0)
+        rgb_l1 = torch.mean(torch.abs(ground_truths - fake_images), dim=[1, 2, 3])
+        rgb_l2 = torch.linalg.norm(ground_truths - fake_images, dim=[1, 2, 3])
         hsv_truths = self.rgb_tensor_to_hsv(ground_truths)
         hsv_fakes = self.rgb_tensor_to_hsv(fake_images)
         h_error = torch.mean(
-            torch.abs(hsv_truths[:, 0, :, :] - hsv_fakes[:, 0, :, :]), dim=0
+            torch.abs(hsv_truths[:, 0, :, :] - hsv_fakes[:, 0, :, :]), dim=[1, 2]
         )
         s_error = torch.mean(
-            torch.abs(hsv_truths[:, 1, :, :] - hsv_fakes[:, 1, :, :]), dim=0
+            torch.abs(hsv_truths[:, 1, :, :] - hsv_fakes[:, 1, :, :]), dim=[1, 2]
         )
         v_error = torch.mean(
-            torch.abs(hsv_truths[:, 2, :, :] - hsv_fakes[:, 2, :, :]), dim=0
+            torch.abs(hsv_truths[:, 2, :, :] - hsv_fakes[:, 2, :, :]), dim=[1, 2]
         )
-        hsv_l1 = torch.mean(torch.abs(hsv_truths - hsv_fakes), dim=0)
-        hsv_l2 = torch.mean(torch.linalg.norm(hsv_truths - hsv_fakes, dim=0), dim=0)
+        hsv_l1 = torch.mean(torch.abs(hsv_truths - hsv_fakes), dim=[1, 2, 3])
+        hsv_l2 = torch.linalg.norm(hsv_truths - hsv_fakes, dim=[1, 2, 3])
 
         return_values = HSVFashionMNISTPerformance(
             h_error, s_error, v_error, hsv_l1, hsv_l2, rgb_l1, rgb_l2
@@ -295,17 +296,15 @@ class HSVFashionMNIST(FashionMNIST, AbstractDataset):
             for attempt in range(n_attempts):
                 targets = self.random_targets(labels.shape)
                 generator_targets = label_transform(targets.to(device))
-                fakes = generator.transform(images.to(device), generator_targets)
+                with autocast():
+                    fakes = generator.transform(images.to(device), generator_targets)
                 batch_performance = self.performance(
                     images, labels, fakes, targets, ReductionType.NONE
                 )
                 batch_performance = batch_performance.map(
                     lambda t: t.squeeze().tolist()
                 )
-                if total_performance is None:
-                    total_performance = batch_performance
-                else:
-                    total_performance.concatenate(batch_performance)
+                total_performance = total_performance.concatenate(batch_performance)
         return total_performance.map(Metric.from_list)
 
 
