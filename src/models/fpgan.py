@@ -174,3 +174,22 @@ class FPGAN(nn.Module, AbstractI2I):
             id_reconstruction_error,
         )
 
+    @staticmethod
+    def load_generator(
+        data_shape,
+        iteration: int,
+        checkpoint_dir: str,
+        map_location,
+        g_conv_dim,
+        g_num_bottleneck,
+        **kwargs,
+    ) -> Generator:
+        return AbstractI2I._load_generator(
+            Generator,
+            data_shape,
+            iteration,
+            checkpoint_dir,
+            map_location,
+            conv_dim=g_conv_dim,
+            num_bottleneck_layers=g_num_bottleneck,
+        )

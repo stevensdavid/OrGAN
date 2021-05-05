@@ -1,18 +1,18 @@
+import os
 from argparse import ArgumentParser, Namespace
 from dataclasses import dataclass
+from inspect import signature
 from pydoc import locate
 from typing import Type
 
+import torch
+from data.abstract_classes import AbstractDataset
+from models.abstract_model import AbstractGenerator, AbstractI2I
+from models.ccgan import LabelEmbedding
 from torch import nn
 from torch.utils.data.dataloader import DataLoader
-from data.abstract_classes import AbstractDataset
-from models.abstract_model import AbstractI2I
-from models.ccgan import LabelEmbedding
 from util.enums import DataSplit
 from util.object_loader import build_from_yaml, load_yaml
-import os
-import torch
-
 from util.pytorch_utils import seed_worker, set_seeds
 
 
@@ -30,10 +30,9 @@ def parse_args() -> Namespace:
 
 def eval(args: Namespace):
     checkpoint_dir = os.path.join(args.checkpoint_dir, args.run_name)
-    hyperparams = load_yaml(os.path.join(checkpoint_dir, "hyperparams.yaml"))
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
-    dataset: AbstractDataset = build_from_yaml(args.data_config)
+    dataset: AbstractDataset = build_from_yaml(args.data_config, train=False)
     dataset.set_mode(DataSplit.TEST)
     data_shape = dataset.data_shape()
     if args.cyclical:
@@ -44,13 +43,20 @@ def eval(args: Namespace):
         embedding.to(device)
         embedding.eval()
         embedding = nn.DataParallel(embedding)
-    model_class: Type = locate(args.model)
-    model: AbstractI2I = model_class(
-        data_shape=data_shape, device=device, **hyperparams
-    )
-    model.load_checkpoint(args.resume_from, args.checkpoint_dir)
-    model.to(device)
-    model.set_eval()
+        data_shape.embedding_dim = args.ccgan_embedding_dim
+    model_class: Type[AbstractI2I] = locate(args.model)
+    generator_args = {
+        **vars(args),
+        # following arguments override anything in args
+        "data_shape": data_shape,
+        "iteration": args.resume_from,
+        "checkpoint_dir": checkpoint_dir,
+        "map_location": "cuda",
+    }
+    generator: AbstractGenerator = model_class.load_generator(**generator_args)
+    generator.to(device)
+    generator.eval()
+    generator = nn.DataParallel(generator)
 
     def transform_labels(y):
         with torch.no_grad():
@@ -58,21 +64,29 @@ def eval(args: Namespace):
 
     with torch.no_grad():
         evaluation = dataset.test_model(
-            model.module.generator,
-            args.batch_size,
-            device,
-            transform_labels,
+            generator.module, args.batch_size, args.n_workers, device, transform_labels,
         )
-    with open(os.path.join(checkpoint_dir, "test_results.txt")) as f:
+    print(evaluation)
+    with open(os.path.join(checkpoint_dir, "test_results.txt"), "w") as f:
         f.write(str(evaluation))
-        print(evaluation)
 
 
 if __name__ == "__main__":
     args = parse_args()
+    args_override = vars(args)
     args_file = load_yaml(args.args_file)
-    model_hyperparams = load_yaml(args.model_hyperparams)
-    args = Namespace(**{**args_file, **model_hyperparams, **vars(args)})
+    args = {**args_file, **args_override}
+    model_hyperparams = load_yaml(args["model_hyperparams"])
+    args = Namespace(
+        **{
+            # default args that are overridden from args_file if provided
+            "embed_generator": False,
+            "cyclical": False,
+            **args,
+            **model_hyperparams,
+            **args_override,
+        }
+    )
     set_seeds(seed=0)
     # Always run in DataParallel. Should be fast enough anyways.
     eval(args)

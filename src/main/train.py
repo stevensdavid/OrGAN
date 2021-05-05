@@ -200,7 +200,7 @@ def train(gpu: int, args: Namespace, train_conf: TrainingConfig):
             n_neighbours=hyperparams["ccgan_n_neighbours"],
         )
         train_dataset.set_mode(DataSplit.TRAIN)
-    if args.embed_generator:
+    if args.embed_generator or args.embed_discriminator:
         embedding = LabelEmbedding(args.ccgan_embedding_dim, n_labels=data_shape.y_dim)
         embedding.load_state_dict(
             torch.load(args.ccgan_embedding_file, map_location=map_location)()

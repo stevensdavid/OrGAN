@@ -1,0 +1,27 @@
+name: Plain_Generator
+project: clustered_hsv
+command:
+  - ${env}
+  - python
+  - -m
+  - ${program}
+  - --args_file
+  - configs/experiments/clustered_hsv/plain_generator/args.yaml
+  - --log_hyperparams
+early_terminate:
+  min_iter: 10
+  type: hyperband
+method: bayes
+metric:
+  goal: minimize
+  name: rgb_l1
+parameters:
+  l_rec:
+    distribution: uniform
+    min: -1
+    max: 1
+  label_noise_variance:
+    distribution: uniform
+    min: -3
+    max: -1.5
+program: main.train

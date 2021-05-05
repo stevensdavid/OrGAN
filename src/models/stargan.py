@@ -20,7 +20,6 @@ class Hyperparams:
     d_num_scales: int
     l_mse: float
     l_rec: float
-    l_grad_penalty: float
 
 
 @dataclass
@@ -51,7 +50,6 @@ class StarGAN(nn.Module, AbstractI2I):
         d_num_scales: int,
         l_mse: float,
         l_rec: float,
-        l_grad_penalty: float,
         **kwargs,
     ):
         super().__init__()
@@ -64,7 +62,6 @@ class StarGAN(nn.Module, AbstractI2I):
             d_num_scales=d_num_scales,
             l_mse=l_mse,
             l_rec=l_rec,
-            l_grad_penalty=l_grad_penalty,
         )
         self.generator = Generator(
             self.data_shape,
@@ -149,3 +146,22 @@ class StarGAN(nn.Module, AbstractI2I):
             total, real_loss, fake_loss, label_error, reconstruction_loss,
         )
 
+    @staticmethod
+    def load_generator(
+        data_shape,
+        iteration: int,
+        checkpoint_dir: str,
+        map_location,
+        g_conv_dim,
+        g_num_bottleneck,
+        **kwargs,
+    ) -> Generator:
+        return AbstractI2I._load_generator(
+            Generator,
+            data_shape,
+            iteration,
+            checkpoint_dir,
+            map_location,
+            conv_dim=g_conv_dim,
+            num_bottleneck_layers=g_num_bottleneck,
+        )

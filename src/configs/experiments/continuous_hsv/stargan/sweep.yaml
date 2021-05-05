@@ -1,0 +1,27 @@
+name: StarGAN
+project: continuous_hsv
+command:
+  - ${env}
+  - python
+  - -m
+  - ${program}
+  - --args_file
+  - configs/experiments/continuous_hsv/stargan/args.yaml
+  - --log_hyperparams
+early_terminate:
+  min_iter: 10
+  type: hyperband
+method: bayes
+metric:
+  goal: minimize
+  name: rgb_l1
+parameters:
+  l_rec:
+    distribution: uniform
+    min: -1
+    max: 1
+  l_mse:
+    distribution: uniform
+    min: -1
+    max: 1
+program: main.train
