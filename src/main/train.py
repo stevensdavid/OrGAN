@@ -461,16 +461,8 @@ def train(gpu: int, args: Namespace, train_conf: TrainingConfig):
         total_performance: DataclassExtensions = 0
         with torch.no_grad():
             for samples, real_labels in iter(val_data):
-                if args.ccgan_wrapper:
-                    real_labels, sample_weights = (
-                        real_labels["labels"],
-                        real_labels["label_weights"],
-                    )
-                else:
-                    sample_weights = torch.ones(real_labels.shape[0])
                 cuda_samples = samples.to(device, non_blocking=True)
                 real_labels = real_labels.to(device, non_blocking=True)
-                sample_weights = sample_weights.to(device, non_blocking=True)
                 for attempt in range(n_attempts):
                     target_labels = val_dataset.random_targets(len(samples))
                     cuda_targets = torch.unsqueeze(target_labels, 1).to(
@@ -495,6 +487,8 @@ def train(gpu: int, args: Namespace, train_conf: TrainingConfig):
                     else:
                         # dataset doesn't support performance metric, use generator loss
                         # as proxy
+                        sample_weights = torch.ones(real_labels.shape[0])
+                        sample_weights = sample_weights.to(device, non_blocking=True)
                         discriminator_input_labels = discriminator_labels(real_labels)
                         generator_input_labels = generator_labels(real_labels)
                         discriminator_targets = discriminator_labels(cuda_targets)
