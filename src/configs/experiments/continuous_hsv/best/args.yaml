@@ -1,5 +1,5 @@
 epochs: 100
-batch_size: 500
+batch_size: 450
 data_config: configs/datasets/non_cyclical_hsv.yaml
 checkpoint_dir: /storage/checkpoints
 experiment_name: Continuous_HSV_Best

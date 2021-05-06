@@ -1,5 +1,5 @@
 epochs: 100
-batch_size: 500
+batch_size: 450
 data_config: configs/datasets/non_cyclical_clustered_hsv.yaml
 checkpoint_dir: /storage/checkpoints
 experiment_name: Clustered_HSV_Soft_CCGAN
