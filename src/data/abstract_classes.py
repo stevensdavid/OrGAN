@@ -3,9 +3,9 @@ from typing import Callable, List, Optional
 
 import numpy as np
 import torch
-from torch.utils.data import Dataset
 from models.abstract_model import AbstractGenerator
-from util.dataclasses import DataShape, DataclassType, GeneratedExamples, LabelDomain
+from torch.utils.data import Dataset
+from util.dataclasses import DataclassType, DataShape, GeneratedExamples, LabelDomain
 from util.enums import DataSplit
 from util.pytorch_utils import stitch_images
 
