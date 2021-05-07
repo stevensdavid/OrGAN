@@ -1,4 +1,5 @@
 import os
+import random
 import re
 from typing import Callable, List, Optional, Tuple
 
@@ -27,6 +28,13 @@ class UTKFace(AbstractDataset):
         self.val_transform = transforms.Compose(transformations)
 
         self.images, self.labels = self._load_dataset()
+        old_random_state = random.getstate()
+        random.seed(0)
+        temp = list(zip(self.images, self.labels))
+        random.shuffle(temp)
+        self.images, self.labels = zip(*temp)
+        random.setstate(old_random_state)
+
         num_images = len(self.labels)
         # Four splits to support training auxiliary classifiers, etc. 55-15-15-15
         self.len_train = int(np.floor(0.55 * num_images))
@@ -51,7 +59,7 @@ class UTKFace(AbstractDataset):
         for filename in contents:
             match = label_pattern.search(filename)
             if match:
-                images.append(filename)
+                images.append(os.path.join(self.root, filename))
                 labels.append(int(match.group("age")))
         return images, labels
 
