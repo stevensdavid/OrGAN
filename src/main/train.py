@@ -512,9 +512,10 @@ def train(gpu: int, args: Namespace, train_conf: TrainingConfig):
         if rank == 0:
             if not val_dataset.has_performance_metrics():
                 # TODO: clean this
-                generated = model.module.generator.transform(
-                    cuda_samples, generator_targets
-                )
+                with autocast(), torch.no_grad():
+                    generated = model.module.generator.transform(
+                        cuda_samples, generator_targets
+                    )
             examples = val_dataset.stitch_examples(
                 samples[:10], real_labels[:10], generated[:10].cpu(), target_labels[:10]
             )
