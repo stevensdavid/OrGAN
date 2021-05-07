@@ -1,0 +1,4 @@
+class: data.utk_face.UTKFace
+kwargs:
+  root: /storage/data/UTKFace
+  image_size: 200
