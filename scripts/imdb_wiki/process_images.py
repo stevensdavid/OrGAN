@@ -4,6 +4,7 @@ import json
 import os
 import random
 from argparse import ArgumentParser
+from concurrent.futures import ThreadPoolExecutor, as_completed
 from uuid import UUID
 
 import numpy as np
@@ -20,6 +21,7 @@ reproducible_uuid = lambda: UUID(int=rd.getrandbits(128))
 parser = ArgumentParser()
 parser.add_argument("--root_dir", type=str, help="IMDB-WIKI directory", required=True)
 parser.add_argument("--target_dim", type=int, default=128)
+parser.add_argument("--n_workers", type=int, default=12)
 args = parser.parse_args()
 
 # Loading dataset
@@ -34,9 +36,9 @@ meta = meta[meta["age"] <= 101]
 
 os.makedirs(os.path.join(args.root_dir, "processed_images"), exist_ok=True)
 ages = {}
-for _, image_metadata in tqdm(
-    meta.iterrows(), desc="Processing images", total=len(meta)
-):
+
+
+def process_image(image_metadata):
     image_path = os.path.join(args.root_dir, image_metadata["path"])
     image = Image.open(image_path)
     if image.mode != "RGB":
@@ -48,6 +50,18 @@ for _, image_metadata in tqdm(
     filename = f"{str(age).zfill(3)}_{reproducible_uuid()}.jpg"
     destination_path = os.path.join(args.root_dir, "processed_images", filename)
     ages[filename] = age
+    image.save(destination_path)
+
+
+with ThreadPoolExecutor(max_workers=args.n_workers) as executor:
+    jobs = [
+        executor.submit(process_image, image_metadata)
+        for _, image_metadata in tqdm(
+            meta.iterrows(), desc="Queuing images", total=len(meta)
+        )
+    ]
+    for _ in tqdm(as_completed(jobs), desc="Processing images", total=len(meta)):
+        continue
 
 with open(os.path.join(args.root_dir, "ages.json"), "w") as f:
     json.dump(ages, f)
