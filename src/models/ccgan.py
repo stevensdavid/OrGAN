@@ -4,7 +4,7 @@ Fixed-Point GAN adapted from Siddiquee et al. (2019) with additions from Ding et
 """
 from dataclasses import dataclass
 from multiprocessing import Value
-from typing import Literal, Optional, Tuple, Union
+from typing import Optional, Tuple, Union
 
 import torch
 from torch import Tensor, nn
@@ -167,10 +167,7 @@ class CCGenerator(patchgan.Generator):
         self, data_shape: DataShape, conv_dim: int, num_bottleneck_layers: int
     ):
         super().__init__(
-            data_shape,
-            conv_dim,
-            num_bottleneck_layers,
-            conditional_norm=True,
+            data_shape, conv_dim, num_bottleneck_layers, conditional_norm=True,
         )
 
     def forward(self, x: Tensor, y: Tensor) -> Tensor:
@@ -189,11 +186,7 @@ class CCDiscriminator(nn.Module):
         super().__init__()
         layers = [
             nn.Conv2d(
-                data_shape.n_channels,
-                conv_dim,
-                kernel_size=4,
-                stride=2,
-                padding=1,
+                data_shape.n_channels, conv_dim, kernel_size=4, stride=2, padding=1,
             ),
             nn.PReLU(),
         ]
@@ -245,7 +238,7 @@ class CCStarGAN(StarGAN):
         l_rec: float,
         l_mse: Optional[float] = None,  # Only needed if not ccgan_discriminator
         l_grad: Optional[float] = None,  # Only needed if WGAN-GP
-        gan_type: Literal["WGAN-GP", "LSGAN", "RaLSGAN"] = "RaLSGAN",
+        gan_type: str = "RaLSGAN",
         embed_generator: bool = False,
         embed_discriminator: bool = False,
         **kwargs,
@@ -368,10 +361,7 @@ class CCStarGAN(StarGAN):
 
         total = classification_real + classification_fake + gradient_penalty
         return WGANCCDiscriminatorLoss(
-            total,
-            classification_real,
-            classification_fake,
-            gradient_penalty,
+            total, classification_real, classification_fake, gradient_penalty,
         )
 
     def discriminator_loss(
