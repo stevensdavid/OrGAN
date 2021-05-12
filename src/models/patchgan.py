@@ -106,8 +106,15 @@ class Generator(AbstractGenerator):
 
 
 class Discriminator(AbstractDiscriminator):
-    def __init__(self, data_shape: DataShape, conv_dim: int, num_scales: int):
+    def __init__(
+        self,
+        data_shape: DataShape,
+        conv_dim: int,
+        num_scales: int,
+        max_label: float = None,
+    ):
         super().__init__()
+        self.max_label = max_label
         layers = [
             nn.Conv2d(
                 data_shape.n_channels, conv_dim, kernel_size=4, stride=2, padding=1,
@@ -135,11 +142,14 @@ class Discriminator(AbstractDiscriminator):
             kernel_size=regressor_kernel_size,
             bias=False,
         )
+        self.sigmoid = nn.Sigmoid()
 
     def forward(self, x: Tensor) -> Tuple[Tensor, Tensor]:
         h = self.hidden_layers(x)
         image_source = self.discriminator(h)
         image_label = self.regressor(h)
+        if self.max_label is not None:
+            image_label = self.max_label * self.sigmoid(image_label)
 
         return (
             image_source,

@@ -56,6 +56,7 @@ class FPGAN(nn.Module, AbstractI2I):
         l_mse: float,
         l_rec: float,
         l_id: float,
+        max_label: float=None,
         **kwargs,
     ):
         super().__init__()
@@ -76,7 +77,7 @@ class FPGAN(nn.Module, AbstractI2I):
             self.hyperparams.g_num_bottleneck,
         )
         self.discriminator = Discriminator(
-            self.data_shape, self.hyperparams.d_conv_dim, self.hyperparams.d_num_scales
+            self.data_shape, self.hyperparams.d_conv_dim, self.hyperparams.d_num_scales, max_label
         )
         self.square_error = nn.MSELoss(reduction="none")
         self.mse = nn.MSELoss()
