@@ -1,0 +1,4 @@
+class: data.imdb_wiki.IMDBWiki
+kwargs:
+  root: /storage/data/imdb_wiki
+  image_size: 128
