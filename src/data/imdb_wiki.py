@@ -99,9 +99,9 @@ class IMDBWiki(AbstractDataset):
             image = self.train_transform(image)
         else:
             image = self.val_transform(image)
-        label = self.normalize_label(label)
         label = torch.tensor([label], dtype=torch.float32)
         image = self.normalize(image)
+        label = self.normalize_label(label)
         return image, label
 
     def test_model(
