@@ -9,11 +9,13 @@ from typing import Optional, Tuple, Union
 import torch
 from torch import Tensor, nn
 from torch.cuda.amp import autocast
-from torchvision.models import (resnet18, resnet34, resnet50, resnet101,
-                                resnet152)
+from torchvision.models import resnet18, resnet34, resnet50, resnet101, resnet152
 from util.dataclasses import DataclassExtensions, DataShape
-from util.pytorch_utils import (ConditionalInstanceNorm2d, conv2d_output_size,
-                                relativistic_loss)
+from util.pytorch_utils import (
+    ConditionalInstanceNorm2d,
+    conv2d_output_size,
+    relativistic_loss,
+)
 
 from models import patchgan
 from models.abstract_model import AbstractI2I
@@ -59,6 +61,7 @@ class RelativisticCCStarGANGeneratorLoss(DataclassExtensions):
     relative_real: Tensor
     relative_fake: Tensor
     reconstruction: Tensor
+    unscaled_total: Tensor
 
 
 @dataclass
@@ -424,16 +427,16 @@ class CCStarGAN(StarGAN):
 
         # Target to input
         reconstructed_image = self.generator.transform(fake_image, embedded_input_label)
-        g_loss_rec = self.hyperparams.l_rec * torch.mean(
-            torch.abs(input_image - reconstructed_image)
-        )
+        g_loss_rec = torch.mean(torch.abs(input_image - reconstructed_image))
 
-        total = (real_loss + fake_loss) / 2 + g_loss_rec
+        total = (real_loss + fake_loss) / 2 + self.hyperparams.l_rec * g_loss_rec
+        unscaled_total = (real_loss + fake_loss) / 2 + g_loss_rec
         return RelativisticCCStarGANGeneratorLoss(
             total=total,
             relative_real=real_loss,
             relative_fake=fake_loss,
             reconstruction=g_loss_rec,
+            unscaled_total=unscaled_total,
         )
 
     def wgan_generator_loss(

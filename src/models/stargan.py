@@ -37,6 +37,7 @@ class GeneratorLoss(DataclassExtensions):
     relative_fake: Tensor
     label_error: Tensor
     reconstruction: Tensor
+    unscaled_total: Tensor
 
 
 class StarGAN(nn.Module, AbstractI2I):
@@ -136,18 +137,23 @@ class StarGAN(nn.Module, AbstractI2I):
         )
         fake_loss = torch.mean((fake_sources - average_real - 1) ** 2)
 
-        label_error = self.hyperparams.l_mse * self.mse(fake_labels, target_label)
+        label_error = self.mse(fake_labels, target_label)
 
         # Target to input
         reconstructed_image = self.generator.transform(fake_image, embedded_input_label)
-        reconstruction_loss = self.hyperparams.l_rec * torch.mean(
+        reconstruction_loss = torch.mean(
             torch.abs(input_image - reconstructed_image)
         )
 
-        total = (real_loss + fake_loss) / 2 + label_error + reconstruction_loss
+        total = (
+            (real_loss + fake_loss) / 2
+            + self.hyperparams.l_mse * label_error
+            + self.hyperparams.l_rec * reconstruction_loss
+        )
+        unscaled_total = (real_loss + fake_loss) / 2 + label_error + reconstruction_loss
 
         return GeneratorLoss(
-            total, real_loss, fake_loss, label_error, reconstruction_loss,
+            total, real_loss, fake_loss, label_error, reconstruction_loss, unscaled_total,
         )
 
     @staticmethod

@@ -9,12 +9,12 @@ command:
   - configs/experiments/imdb_wiki/embedded_discriminator/args.yaml
   - --log_hyperparams
 early_terminate:
-  min_iter: 10
+  min_iter: 3
   type: hyperband
 method: bayes
 metric:
   goal: minimize
-  name: val_total
+  name: val_unscaled_total
 parameters:
   l_rec:
     distribution: uniform
