@@ -45,19 +45,15 @@ class IMDBWiki(AbstractDataset):
         self.len_val = int(np.floor(0.15 * num_images))
         self.len_test = int(np.floor(0.15 * num_images))
         self.len_holdout = int(np.ceil(0.15 * num_images))
-        self.min_label = 1
+        self.min_label = 0  # actual min is 1, but it's reasonable to include 0 years
         self.max_label = max(self.labels)
-        self.log_min = np.log(self.min_label)
-        self.log_max = np.log(self.max_label)
         self.logger.info("Finished loading dataset.")
 
-    def normalize_label(self, y: float) -> float:
-        if y == 0:
-            y = 1
-        return (np.log(y) - self.log_min) / (self.log_max - self.log_min)
+    def normalize_label(self, y: int) -> float:
+        return (y - self.min_label) / (self.max_label - self.min_label)
 
-    def denormalize_label(self, y: float) -> float:
-        return np.exp(y * (self.log_max - self.log_min) + self.log_min)
+    def denormalize_label(self, y: float) -> int:
+        return int(y * (self.max_label - self.min_label) + self.min_label)
 
     def _load_dataset(self) -> Tuple[List[str], List[int]]:
         with open(os.path.join(self.root, "ages.json"), "r") as f:
