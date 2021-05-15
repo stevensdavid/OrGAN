@@ -3,17 +3,21 @@ from argparse import ArgumentParser, Namespace
 from pydoc import locate
 from typing import Callable, List, Tuple, Type
 
+import numpy as np
 import torch
 import torch.cuda
 from data.abstract_classes import AbstractDataset
 from models.abstract_model import AbstractGenerator, AbstractI2I
 from models.ccgan import LabelEmbedding
+from PIL import Image
 from torch import nn
+from torch.cuda.amp import autocast
 from tqdm import tqdm
+from util.cyclical_encoding import to_cyclical
 from util.dataclasses import DataShape
 from util.enums import DataSplit
 from util.object_loader import build_from_yaml, load_yaml
-from util.pytorch_utils import set_seeds
+from util.pytorch_utils import set_seeds, stitch_images
 
 
 def parse_args() -> Namespace:
@@ -26,8 +30,8 @@ def parse_args() -> Namespace:
     )
     parser.add_argument("--mode", choices=["metrics", "sample"], default="metrics")
     parser.add_argument("--sweep_name", type=str, help="Only eval this sweep.")
-    parser.add_argument("--batch_size", type=int, required=True)
-    parser.add_argument("--n_workers", type=int, required=True)
+    parser.add_argument("--batch_size", type=int)
+    parser.add_argument("--n_workers", type=int)
     args = parser.parse_args()
     return args
 
@@ -41,9 +45,13 @@ def get_sweeps(project_root: str) -> List[str]:
     )
 
 
-def eval_sweeps(args: Namespace):
+def eval(args: Namespace):
+    if args.mode == "metrics":
+        fn = eval_sweep
+    elif args.mode == "sample":
+        fn = sample_sweep
     if args.sweep_name:
-        eval_sweep(
+        fn(
             os.path.join(args.project_root, args.sweep_name),
             args.batch_size,
             args.n_workers,
@@ -53,7 +61,7 @@ def eval_sweeps(args: Namespace):
         for sweep_dir in tqdm(sweeps, desc="Evaluating sweeps"):
             tqdm.write(f"Testing sweep '{os.path.split(sweep_dir)[1]}'")
             try:
-                eval_sweep(sweep_dir, args.batch_size, args.n_workers)
+                fn(sweep_dir, args.batch_size, args.n_workers)
             except Exception as e:
                 tqdm.write(f"Test crashed with exception:\n{e}")
             finally:
@@ -63,14 +71,8 @@ def eval_sweeps(args: Namespace):
 def eval_sweep(sweep_dir: str, batch_size: int, n_workers: int):
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     args = load_yaml(os.path.join(sweep_dir, "args.yaml"))
-    dataset: AbstractDataset = build_from_yaml(args["data_config"], train=False)
-    dataset.set_mode(DataSplit.TEST)
-    data_shape = dataset.data_shape()
-    if args.get("cyclical"):
-        data_shape.y_dim = 2
-
+    dataset, data_shape = build_dataset(args)
     label_transform, data_shape = get_label_transform(args, data_shape, device)
-
     generator = build_generator(args, data_shape, sweep_dir, device)
 
     with torch.no_grad():
@@ -135,18 +137,54 @@ def build_embedding(
     return embedding
 
 
-def sample_sweeps(args: Namespace):
-    ...
+def build_dataset(args) -> Tuple[AbstractDataset, DataShape]:
+    dataset: AbstractDataset = build_from_yaml(args["data_config"], train=False)
+    dataset.set_mode(DataSplit.TEST)
+    data_shape = dataset.data_shape()
+    if args.get("cyclical"):
+        data_shape.y_dim = 2
+    return dataset, data_shape
 
 
-def sample_sweep():
-    ...
+def sample_sweep(sweep_dir: str, batch_size: int, n_workers: int):
+    device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+    args = load_yaml(os.path.join(sweep_dir, "args.yaml"))
+    dataset, data_shape = build_dataset(args)
+    label_transform, data_shape = get_label_transform(args, data_shape, device)
+    generator = build_generator(args, data_shape, sweep_dir, device)
+
+    domain = dataset.label_domain()
+
+    def interpolate(
+        input_image: torch.Tensor, min: float, max: float, steps: int
+    ) -> torch.Tensor:
+        input_image = input_image.to(device)
+        labels = torch.linspace(min, max, steps, device=device)
+        target_labels = labels.view(-1, 1)
+        if args.get("cyclical"):
+            target_labels = to_cyclical(target_labels)
+        target_labels = label_transform(target_labels)
+        with autocast(), torch.no_grad():
+            outputs = generator.module.transform(
+                input_image.expand(steps, -1, -1, -1), target_labels,
+            )
+        return outputs
+
+    interpolations = []
+    for idx in range(10):
+        image, label = dataset[idx]
+        interpolation = interpolate(image, domain.min, domain.max, steps=10).cpu()
+        stitched_image = dataset.stitch_interpolations(
+            image, interpolation, label, domain
+        ).image
+        interpolations.append(np.moveaxis(stitched_image, -1, 0))
+    stitched = stitch_images(interpolations, dim=1)  # Stack images vertically
+    stitched = (stitched * 255).astype(np.uint8)
+    image = Image.fromarray(stitched)
+    image.save(os.path.join(sweep_dir, "interpolations.png"))
 
 
 if __name__ == "__main__":
     args = parse_args()
     set_seeds(seed=0)
-    if args.mode == "sample":
-        sample_sweeps(args)
-    elif args.mode == "metrics":
-        eval_sweeps(args)
+    eval(args)
