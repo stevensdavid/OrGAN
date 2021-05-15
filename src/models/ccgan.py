@@ -10,13 +10,11 @@ import torch
 from torch import Tensor, nn
 from torch.cuda.amp import autocast
 from torch.cuda.amp.grad_scaler import GradScaler
-from torchvision.models import resnet18, resnet34, resnet50, resnet101, resnet152
+from torchvision.models import (resnet18, resnet34, resnet50, resnet101,
+                                resnet152)
 from util.dataclasses import DataclassExtensions, DataShape
-from util.pytorch_utils import (
-    ConditionalInstanceNorm2d,
-    conv2d_output_size,
-    relativistic_loss,
-)
+from util.pytorch_utils import (ConditionalInstanceNorm2d, conv2d_output_size,
+                                relativistic_loss)
 
 from models import patchgan
 from models.abstract_model import AbstractI2I
@@ -548,10 +546,11 @@ class CCStarGAN(StarGAN):
         map_location,
         g_conv_dim,
         g_num_bottleneck,
+        embed_generator: bool = False,
         **kwargs,
-    ) -> CCGenerator:
+    ) -> Union[CCGenerator, patchgan.Generator]:
         return AbstractI2I._load_generator(
-            CCGenerator,
+            CCGenerator if embed_generator else patchgan.Generator,
             data_shape,
             iteration,
             checkpoint_dir,
@@ -699,10 +698,11 @@ class CCFPGAN(FPGAN):
         map_location,
         g_conv_dim,
         g_num_bottleneck,
+        embed_generator: bool = False,
         **kwargs,
-    ) -> CCGenerator:
+    ) -> Union[CCGenerator, patchgan.Generator]:
         return AbstractI2I._load_generator(
-            CCGenerator,
+            CCGenerator if embed_generator else patchgan.Generator,
             data_shape,
             iteration,
             checkpoint_dir,
