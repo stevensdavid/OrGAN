@@ -1,22 +1,18 @@
 import os
 from argparse import ArgumentParser, Namespace
-from contextlib import AbstractContextManager
-from dataclasses import dataclass
-from inspect import signature
 from pydoc import locate
-from typing import Callable, Type
+from typing import Type
 
 import torch
 from data.abstract_classes import AbstractDataset
 from models.abstract_model import AbstractGenerator, AbstractI2I
 from models.ccgan import LabelEmbedding
 from torch import nn
-from torch.utils.data.dataloader import DataLoader
 from tqdm import tqdm
 from util.dataclasses import DataShape
 from util.enums import DataSplit
 from util.object_loader import build_from_yaml, load_yaml
-from util.pytorch_utils import seed_worker, set_seeds
+from util.pytorch_utils import set_seeds
 
 
 def parse_args() -> Namespace:
@@ -45,13 +41,15 @@ def eval_sweeps(args: Namespace):
     if args.sweep_name:
         sweeps = [os.path.join(args.project_root, args.sweep_name)]
     else:
-        sweeps = [
-            path
-            for path in [
-                os.path.join(args.project_root, x) for x in os.listdir(args.project_root)
-            ]
-            if os.path.isdir(path)
-        ]
+        sweeps = list(
+            filter(
+                os.path.isdir,
+                map(
+                    lambda x: os.path.join(args.project_root, x),
+                    os.listdir(args.project_root),
+                ),
+            )
+        )
     for sweep_dir in tqdm(sweeps, desc="Evaluating sweeps"):
         tqdm.write(f"Testing sweep '{os.path.split(sweep_dir)[1]}'")
         try:
