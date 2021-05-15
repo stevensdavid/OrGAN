@@ -9,7 +9,6 @@ from models.abstract_model import AbstractGenerator, AbstractI2I
 from models.ccgan import LabelEmbedding
 from torch import nn
 from tqdm import tqdm
-from util.dataclasses import DataShape
 from util.enums import DataSplit
 from util.object_loader import build_from_yaml, load_yaml
 from util.pytorch_utils import set_seeds
@@ -24,7 +23,6 @@ def parse_args() -> Namespace:
         required=True,
     )
     parser.add_argument("--sweep_name", type=str, help="Only eval this sweep.")
-    parser.add_argument("--data_config", type=str, required=True)
     parser.add_argument("--batch_size", type=int, required=True)
     parser.add_argument("--n_workers", type=int, required=True)
     args = parser.parse_args()
@@ -32,14 +30,12 @@ def parse_args() -> Namespace:
 
 
 def eval_sweeps(args: Namespace):
-    device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-
-    dataset: AbstractDataset = build_from_yaml(args.data_config, train=False)
-    dataset.set_mode(DataSplit.TEST)
-    data_shape = dataset.data_shape()
-
     if args.sweep_name:
-        sweeps = [os.path.join(args.project_root, args.sweep_name)]
+        eval_sweep(
+            os.path.join(args.project_root, args.sweep_name),
+            args.batch_size,
+            args.n_workers,
+        )
     else:
         sweeps = list(
             filter(
@@ -50,27 +46,23 @@ def eval_sweeps(args: Namespace):
                 ),
             )
         )
-    for sweep_dir in tqdm(sweeps, desc="Evaluating sweeps"):
-        tqdm.write(f"Testing sweep '{os.path.split(sweep_dir)[1]}'")
-        try:
-            eval_sweep(
-                dataset, sweep_dir, data_shape, device, args.batch_size, args.n_workers,
-            )
-        except Exception as e:
-            tqdm.write(f"Test crashed with exception:\n{e}")
+        for sweep_dir in tqdm(sweeps, desc="Evaluating sweeps"):
+            tqdm.write(f"Testing sweep '{os.path.split(sweep_dir)[1]}'")
+            try:
+                eval_sweep(sweep_dir, args.batch_size, args.n_workers)
+            except Exception as e:
+                tqdm.write(f"Test crashed with exception:\n{e}")
 
 
-def eval_sweep(
-    dataset: AbstractDataset,
-    sweep_dir: str,
-    data_shape: DataShape,
-    device: torch.device,
-    batch_size: int,
-    n_workers: int,
-):
+def eval_sweep(sweep_dir: str, batch_size: int, n_workers: int):
+    device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     args = load_yaml(os.path.join(sweep_dir, "args.yaml"))
+    dataset: AbstractDataset = build_from_yaml(args["data_config"], train=False)
+    dataset.set_mode(DataSplit.TEST)
+    data_shape = dataset.data_shape()
     if args.get("cyclical"):
         data_shape.y_dim = 2
+
     if args.get("embed_generator"):
         embedding = LabelEmbedding(
             args["ccgan_embedding_dim"], n_labels=data_shape.y_dim
