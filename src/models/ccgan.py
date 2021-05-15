@@ -9,6 +9,7 @@ from typing import Optional, Tuple, Union
 import torch
 from torch import Tensor, nn
 from torch.cuda.amp import autocast
+from torch.cuda.amp.grad_scaler import GradScaler
 from torchvision.models import resnet18, resnet34, resnet50, resnet101, resnet152
 from util.dataclasses import DataclassExtensions, DataShape
 from util.pytorch_utils import (
@@ -266,6 +267,7 @@ class CCStarGAN(StarGAN):
         elif l_mse is None:
             raise TypeError("Missing mandatory hyperparameter for PatchGAN disc: l_mse")
         self.bce = nn.BCEWithLogitsLoss(reduction="none")
+        self.scaler = GradScaler()
 
     def relativistic_discriminator_loss(
         self,
@@ -348,7 +350,7 @@ class CCStarGAN(StarGAN):
         grad_sources = self.discriminator(x_hat, y_hat)
         weight = torch.ones(grad_sources.size(), device=self.device)
         gradient = torch.autograd.grad(
-            outputs=grad_sources,
+            outputs=self.scaler.scale(grad_sources),
             inputs=[x_hat, y_hat],
             grad_outputs=weight,
             retain_graph=True,
