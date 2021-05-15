@@ -3,8 +3,8 @@ from __future__ import annotations
 from dataclasses import astuple, dataclass, fields
 from operator import add, sub
 from typing import Callable, Dict, List, Union
-import numpy as np
 
+import numpy as np
 import torch
 from typing_extensions import Protocol
 
@@ -57,13 +57,9 @@ class DataclassExtensions:
     def map(self, op: Callable) -> DataclassType:
         return type(self)(*tuple(map(op, self.to_tuple())))
 
-    def concatenate(self, other: DataclassType) -> DataclassType:
-        return type(self)(
-            *tuple(
-                getattr(self, field.name) + getattr(other, field.name)
-                for field in fields(self)
-            )
-        )
+    def extend(self, other: DataclassType) -> DataclassType:
+        for field in fields(self):
+            getattr(self, field.name).extend(getattr(other, field.name))
 
 
 @dataclass

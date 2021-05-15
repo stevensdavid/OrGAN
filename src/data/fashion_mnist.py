@@ -304,7 +304,7 @@ class HSVFashionMNIST(FashionMNIST, AbstractDataset):
                 batch_performance = batch_performance.map(
                     lambda t: t.squeeze().tolist()
                 )
-                total_performance = total_performance.concatenate(batch_performance)
+                total_performance.extend(batch_performance)
         return total_performance.map(Metric.from_list)
 
 
