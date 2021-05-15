@@ -1,6 +1,6 @@
 import os
 from abc import ABC, abstractmethod
-from typing import Type
+from typing import Optional, Type
 
 import torch
 from torch import Tensor, nn
@@ -72,7 +72,11 @@ class AbstractI2I(ABC):
     @staticmethod
     @abstractmethod
     def load_generator(
-        data_shape, iteration: int, checkpoint_dir: str, map_location, **kwargs,
+        data_shape,
+        iteration: Optional[int],
+        checkpoint_dir: str,
+        map_location,
+        **kwargs,
     ) -> AbstractGenerator:
         ...
 
@@ -108,8 +112,12 @@ class AbstractI2I(ABC):
         return self.generator.parameters()
 
     @staticmethod
-    def _make_save_filename(iteration: int, checkpoint_dir: str) -> str:
-        return os.path.join(checkpoint_dir, f"step_{iteration}.pt")
+    def _make_save_filename(iteration: Optional[int], checkpoint_dir: str) -> str:
+        if iteration is None:
+            filename = "best.pt"
+        else:
+            filename = f"step_{iteration}.pt"
+        return os.path.join(checkpoint_dir, filename)
 
     def save_checkpoint(self, iteration: int, checkpoint_dir: str) -> None:
         torch.save(
