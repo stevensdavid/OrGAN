@@ -27,6 +27,7 @@ def parse_args() -> Namespace:
         help="W&B Experiment project root dir. Args are read from this directory.",
         required=True,
     )
+    parser.add_argument("--sweep_name", type=str, help="Only eval this sweep.")
     parser.add_argument("--data_config", type=str, required=True)
     parser.add_argument("--batch_size", type=int, required=True)
     parser.add_argument("--n_workers", type=int, required=True)
@@ -41,13 +42,16 @@ def eval_sweeps(args: Namespace):
     dataset.set_mode(DataSplit.TEST)
     data_shape = dataset.data_shape()
 
-    sweeps = [
-        path
-        for path in [
-            os.path.join(args.project_root, x) for x in os.listdir(args.project_root)
+    if args.sweep_name:
+        sweeps = [os.path.join(args.project_root, args.sweep_name)]
+    else:
+        sweeps = [
+            path
+            for path in [
+                os.path.join(args.project_root, x) for x in os.listdir(args.project_root)
+            ]
+            if os.path.isdir(path)
         ]
-        if os.path.isdir(path)
-    ]
     for sweep_dir in tqdm(sweeps, desc="Evaluating sweeps"):
         tqdm.write(f"Testing sweep '{os.path.split(sweep_dir)[1]}'")
         try:
