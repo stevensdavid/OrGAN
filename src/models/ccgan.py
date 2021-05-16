@@ -10,13 +10,11 @@ import torch
 from torch import Tensor, nn
 from torch.cuda.amp import autocast
 from torch.cuda.amp.grad_scaler import GradScaler
-from torchvision.models import resnet18, resnet34, resnet50, resnet101, resnet152
+from torchvision.models import (resnet18, resnet34, resnet50, resnet101,
+                                resnet152)
 from util.dataclasses import DataclassExtensions, DataShape
-from util.pytorch_utils import (
-    ConditionalInstanceNorm2d,
-    conv2d_output_size,
-    relativistic_loss,
-)
+from util.pytorch_utils import (ConditionalInstanceNorm2d, conv2d_output_size,
+                                relativistic_loss)
 
 from models import patchgan
 from models.abstract_model import AbstractI2I
@@ -267,7 +265,6 @@ class CCStarGAN(StarGAN):
         elif l_mse is None:
             raise TypeError("Missing mandatory hyperparameter for PatchGAN disc: l_mse")
         self.bce = nn.BCEWithLogitsLoss(reduction="none")
-        self.scaler = GradScaler()
 
     def relativistic_discriminator_loss(
         self,
@@ -348,18 +345,16 @@ class CCStarGAN(StarGAN):
         alpha = alpha.view(-1, 1)
         y_hat = (alpha * input_label + (1 - alpha) * target_labels).requires_grad_(True)
         grad_sources = self.discriminator(x_hat, y_hat)
-        with autocast(enabled=False):
-            weight = torch.ones(grad_sources.size(), device=self.device)
-            gradient = torch.autograd.grad(
-                outputs=self.scaler.scale(grad_sources),
-                inputs=[x_hat, y_hat],
-                grad_outputs=weight,
-                retain_graph=True,
-                create_graph=True,
-                only_inputs=True,
-            )[0]
-            gradient = gradient.view(gradient.size(0), -1)
-            gradient = gradient / self.scaler.get_scale()
+        weight = torch.ones(grad_sources.size(), device=self.device)
+        gradient = torch.autograd.grad(
+            outputs=grad_sources,
+            inputs=[x_hat, y_hat],
+            grad_outputs=weight,
+            retain_graph=True,
+            create_graph=True,
+            only_inputs=True,
+        )[0]
+        gradient = gradient.view(gradient.size(0), -1)
         gradient_norm = torch.sqrt(torch.sum(gradient ** 2, dim=1))
         gradient_penalty = torch.mean((gradient_norm - 1) ** 2)
         gradient_penalty *= self.l_grad
