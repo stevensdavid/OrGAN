@@ -10,11 +10,13 @@ import torch
 from torch import Tensor, nn
 from torch.cuda.amp import autocast
 from torch.cuda.amp.grad_scaler import GradScaler
-from torchvision.models import (resnet18, resnet34, resnet50, resnet101,
-                                resnet152)
+from torchvision.models import resnet18, resnet34, resnet50, resnet101, resnet152
 from util.dataclasses import DataclassExtensions, DataShape
-from util.pytorch_utils import (ConditionalInstanceNorm2d, conv2d_output_size,
-                                relativistic_loss)
+from util.pytorch_utils import (
+    ConditionalInstanceNorm2d,
+    conv2d_output_size,
+    relativistic_loss,
+)
 
 from models import patchgan
 from models.abstract_model import AbstractI2I
@@ -299,7 +301,7 @@ class CCStarGAN(StarGAN):
         target_labels: Tensor,
         generator_target_label: Tensor,
         sample_weights: Tensor,
-    ) -> WGANCCDiscriminatorLoss:
+    ) -> LSGANDiscriminatorLoss:
         real_sources = self.discriminator(input_image, input_label)
         fake_images = self.generator.transform(
             input_image, generator_target_label
@@ -327,7 +329,7 @@ class CCStarGAN(StarGAN):
         sources = self.discriminator(input_image, input_label)
         classification_real = -torch.mean(
             sample_weights * sources
-        )  # Should be 0 (real) for all
+        )  # Should be positive (real) for all
         # Discriminator losses with fake images
         fake_image = self.generator.transform(
             input_image, generator_target_label
@@ -336,9 +338,9 @@ class CCStarGAN(StarGAN):
         target_weights = sample_weights.view(-1, 1, 1, 1)
         classification_fake = torch.mean(
             target_weights * sources
-        )  # Should be 1 (fake) for all
+        )  # Should be negative (fake) for all
         # Gradient penalty loss
-        alpha = torch.rand(input_image.size(0), 1, 1, 1).to(self.device)
+        alpha = torch.rand(input_image.size(0), 1, 1, 1, device=self.device)
         # Blend real and fake image randomly
         x_hat = (
             alpha * input_image.data + (1 - alpha) * fake_image.data
@@ -346,16 +348,18 @@ class CCStarGAN(StarGAN):
         alpha = alpha.view(-1, 1)
         y_hat = (alpha * input_label + (1 - alpha) * target_labels).requires_grad_(True)
         grad_sources = self.discriminator(x_hat, y_hat)
-        weight = torch.ones(grad_sources.size(), device=self.device)
-        gradient = torch.autograd.grad(
-            outputs=self.scaler.scale(grad_sources),
-            inputs=[x_hat, y_hat],
-            grad_outputs=weight,
-            retain_graph=True,
-            create_graph=True,
-            only_inputs=True,
-        )[0]
-        gradient = gradient.view(gradient.size(0), -1)
+        with autocast(enabled=False):
+            weight = torch.ones(grad_sources.size(), device=self.device)
+            gradient = torch.autograd.grad(
+                outputs=self.scaler.scale(grad_sources),
+                inputs=[x_hat, y_hat],
+                grad_outputs=weight,
+                retain_graph=True,
+                create_graph=True,
+                only_inputs=True,
+            )[0]
+            gradient = gradient.view(gradient.size(0), -1)
+            gradient = gradient / self.scaler.get_scale()
         gradient_norm = torch.sqrt(torch.sum(gradient ** 2, dim=1))
         gradient_penalty = torch.mean((gradient_norm - 1) ** 2)
         gradient_penalty *= self.l_grad
@@ -450,7 +454,7 @@ class CCStarGAN(StarGAN):
     ) -> CCStarWGANGeneratorLoss:
         # Input to target
         fake_image = self.generator.transform(input_image, embedded_target_label)
-        sources = self.discriminator(fake_image, embedded_target_label)
+        sources = self.discriminator(fake_image, target_label)
         classification_loss = -torch.mean(sources)
 
         # Target to input
