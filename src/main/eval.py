@@ -79,7 +79,7 @@ def eval_sweep(sweep_dir: str, batch_size: int, n_workers: int):
         evaluation = dataset.test_model(
             generator.module, batch_size, n_workers, device, label_transform,
         )
-    tqdm.write(evaluation)
+    tqdm.write(str(evaluation))
     with open(os.path.join(sweep_dir, "test_results.txt"), "w") as f:
         f.write(str(evaluation))
     del generator
