@@ -3,20 +3,17 @@ Fixed-Point GAN adapted from Siddiquee et al. (2019) with additions from Ding et
 (2020)
 """
 from dataclasses import dataclass
-from multiprocessing import Value
-from typing import Optional, Tuple, Union
+from typing import Optional, Union
 
 import torch
 from torch import Tensor, nn
 from torch.cuda.amp import autocast
 from torch.cuda.amp.grad_scaler import GradScaler
-from torchvision.models import resnet18, resnet34, resnet50, resnet101, resnet152
+from torchvision.models import (resnet18, resnet34, resnet50, resnet101,
+                                resnet152)
 from util.dataclasses import DataclassExtensions, DataShape
-from util.pytorch_utils import (
-    ConditionalInstanceNorm2d,
-    conv2d_output_size,
-    relativistic_loss,
-)
+from util.pytorch_utils import (ConditionalInstanceNorm2d, conv2d_output_size,
+                                relativistic_loss)
 
 from models import patchgan
 from models.abstract_model import AbstractI2I
@@ -348,7 +345,7 @@ class CCStarGAN(StarGAN):
         alpha = alpha.view(-1, 1)
         y_hat = (alpha * input_label + (1 - alpha) * target_labels).requires_grad_(True)
         grad_sources = self.discriminator(x_hat, y_hat)
-        with autocast(enabled=False):
+        with autocast(enabled=False), torch.autograd.detect_anomaly():
             gradient = torch.autograd.grad(
                 outputs=self.scaler.scale(grad_sources),
                 inputs=[x_hat, y_hat],
