@@ -57,7 +57,7 @@ class DataclassExtensions:
     def map(self, op: Callable) -> DataclassType:
         return type(self)(*tuple(map(op, self.to_tuple())))
 
-    def extend(self, other: DataclassType) -> DataclassType:
+    def extend(self, other: DataclassType) -> None:
         for field in fields(self):
             getattr(self, field.name).extend(getattr(other, field.name))
 
