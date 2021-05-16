@@ -289,7 +289,7 @@ class HSVFashionMNIST(FashionMNIST, AbstractDataset):
             worker_init_fn=seed_worker,
         )
         n_attempts = 100
-        total_performance = HSVFashionMNISTPerformance(*[[]] * 7)
+        total_performance = HSVFashionMNISTPerformance(*[[] for _ in range(7)])
         for images, labels in tqdm(
             iter(data_loader), desc="Testing batch", total=len(data_loader)
         ):
