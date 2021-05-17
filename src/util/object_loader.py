@@ -19,7 +19,7 @@ def load_yaml(filepath) -> dict:
 def build_from_yaml(filepath: str, **kwargs) -> Any:
     config = load_yaml(filepath)
     class_object: Type = locate(config["class"])
-    build_kwargs = {**kwargs, **config["kwargs"]}
+    build_kwargs = {**config["kwargs"], **kwargs}
     try:
         instance = class_object(**build_kwargs)
     except TypeError as e:
