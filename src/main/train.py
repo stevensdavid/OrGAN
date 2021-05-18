@@ -27,21 +27,12 @@ from torch.utils.data import DataLoader
 from tqdm import trange
 from util.cyclical_encoding import to_cyclical
 from util.dataclasses import DataclassExtensions, LabelDomain, TrainingConfig
-from util.enums import (
-    DataSplit,
-    FrequencyMetric,
-    MultiGPUType,
-    ReductionType,
-    VicinityType,
-)
+from util.enums import (DataSplit, FrequencyMetric, MultiGPUType,
+                        ReductionType, VicinityType)
 from util.logging import Logger
 from util.object_loader import build_from_yaml, load_yaml
-from util.pytorch_utils import (
-    load_optimizer_weights,
-    save_optimizers,
-    seed_worker,
-    set_seeds,
-)
+from util.pytorch_utils import (load_optimizer_weights, save_optimizers,
+                                seed_worker, set_seeds)
 
 
 def parse_args() -> Tuple[Namespace, dict]:
@@ -501,6 +492,9 @@ def train(gpu: int, args: Namespace, train_conf: TrainingConfig):
                                 generator_targets,
                                 sample_weights,
                             )
+                        performance = (
+                            performance * real_labels.shape[0]
+                        )  # Should be sum, not mean
                     total_performance = performance + total_performance
         if use_ddp:
             performance_tensor = total_performance.to_tensor()
