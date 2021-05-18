@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from dataclasses import astuple, dataclass, fields
-from operator import add, sub
+from operator import add, mul, sub
 from typing import Callable, Dict, List, Union
 
 import numpy as np
@@ -38,6 +38,15 @@ class DataclassExtensions:
             return type(self)(*tuple(map(add, self.to_tuple(), term.to_tuple())))
         else:
             return type(self)(*tuple(map(lambda x: x + term, self.to_tuple())))
+
+    def __mul__(self: DataclassType, term: Union[DataclassType, float]):
+        if isinstance(term, DataclassExtensions):
+            return type(self)(*tuple(map(mul, self.to_tuple(), term.to_tuple())))
+        else:
+            return type(self)(*tuple(map(lambda x: x * term, self.to_tuple())))
+
+    def __rmul__(self, other):
+        return self.__mul__(other)
 
     def __sub__(self: DataclassType, other: DataclassType):
         return type(self)(*tuple(map(sub, self.to_tuple(), other.to_tuple())))
