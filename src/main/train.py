@@ -543,7 +543,6 @@ def train(gpu: int, args: Namespace, train_conf: TrainingConfig):
 
 def main():
     args = parse_args()
-    overridden_args = vars(args).copy()
     if args.args_file:
         vars(args).update(load_yaml(args.args_file))
     if args.model_hyperparams:
@@ -551,7 +550,6 @@ def main():
     args.world_size = args.n_gpus * args.n_nodes
     if args.run_name is None:
         args.run_name = generate_slug(3)
-    vars(args).update(overridden_args)
     set_seeds(seed=0)
     train_conf = TrainingConfig.from_yaml(args.train_config)
     if train_conf.multi_gpu_type is MultiGPUType.DDP:
