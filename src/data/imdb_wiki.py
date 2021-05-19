@@ -28,8 +28,6 @@ class IMDBWiki(AbstractDataset):
             [transforms.RandomHorizontalFlip()] + transformations
         )
         self.val_transform = transforms.Compose(transformations)
-        self.logger = getLogger("IMDBWiki")
-        self.logger.info("Loading dataset...")
         self.images, self.labels = self._load_dataset()
         # Shuffle deterministically
         old_random_state = random.getstate()
@@ -47,7 +45,6 @@ class IMDBWiki(AbstractDataset):
         self.len_holdout = int(np.ceil(0.15 * num_images))
         self.min_label = 0  # actual min is 1, but it's reasonable to include 0 years
         self.max_label = max(self.labels)
-        self.logger.info("Finished loading dataset.")
 
     def normalize_label(self, y: int) -> float:
         return (y - self.min_label) / (self.max_label - self.min_label)
