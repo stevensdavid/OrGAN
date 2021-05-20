@@ -2,6 +2,7 @@ from abc import ABC, abstractmethod
 from dataclasses import dataclass
 from typing import Callable, List, Optional, Tuple, Union
 
+import cv2 as cv
 import numpy as np
 import skimage.color
 import torch
@@ -10,9 +11,10 @@ import torchvision.transforms.functional as F
 from models.abstract_model import AbstractGenerator
 from torch import nn
 from torch.cuda.amp.autocast_mode import autocast
+from torch.nn.functional import conv2d
 from torch.utils.data.dataloader import DataLoader
 from torchvision.datasets import FashionMNIST
-from tqdm import tqdm
+from tqdm import tqdm, trange
 from util.dataclasses import (
     DataclassExtensions,
     DataclassType,
@@ -22,9 +24,11 @@ from util.dataclasses import (
     Metric,
 )
 from util.enums import DataSplit, ReductionType
-from util.pytorch_utils import seed_worker, stitch_images
+from util.pytorch_utils import seed_worker, stitch_images, tensor_hash
 
 from data.abstract_classes import AbstractDataset
+
+np.seterr(all="raise")
 
 
 @dataclass
@@ -303,6 +307,7 @@ class HSVFashionMNIST(BaseFashionMNIST):
             min_hue=min_hue,
             max_hue=max_hue,
         )
+        self.len_train = 400
 
     def transform_image(self, image: np.ndarray, factor: float) -> np.ndarray:
         """Shift the hue of an image
@@ -420,6 +425,7 @@ class RotationFashionMNIST(BaseFashionMNIST):
             min_hue=min_angle,
             max_hue=max_angle,
         )
+        self.len_train = 400
 
     def ground_truth(
         self, x: np.ndarray, source_y: float, target_y: float
@@ -467,33 +473,156 @@ class RotationFashionMNIST(BaseFashionMNIST):
         return return_values
 
 
+class BlurredFashionMNIST(BaseFashionMNIST):
+    def __init__(
+        self,
+        root: str,
+        train: bool = True,
+        transform: Optional[Callable] = None,
+        target_transform: Optional[Callable] = None,
+        download: bool = False,
+        simplified: bool = False,
+        n_clusters: Optional[int] = None,
+        noisy_labels: bool = False,
+        fixed_labels: bool = True,
+        min_blur: float = 1,
+        max_blur: float = 5,
+    ) -> None:
+        self.normalize_label = lambda y: (y - min_blur) / (max_blur - min_blur)
+        self.denormalize_label = lambda y: y * (max_blur - min_blur) + min_blur
+        super().__init__(
+            root,
+            train=train,
+            transform=transform,
+            target_transform=target_transform,
+            download=download,
+            simplified=simplified,
+            n_clusters=n_clusters,
+            noisy_labels=noisy_labels,
+            fixed_labels=fixed_labels,
+            min_hue=0,
+            max_hue=1,
+        )
+        x_size, y_size = 32, 32
+        self.kernel_x, self.kernel_y = np.mgrid[
+            -y_size / 2 : y_size / 2, -x_size / 2 : x_size / 2
+        ]
+        self.poisson_amount = 1e-3
+        self.len_train = 400
+        self.blurred_xs, self.blurred_ys = [], []
+        self.idx_lookup = {}
+        for idx in trange(self.total_len()):
+            x, y = super().__getitem__(idx)
+            self.blurred_xs.append(x)
+            self.blurred_ys.append(y)
+            self.idx_lookup[tensor_hash(x)] = idx
+
+    def ground_truth(
+        self, x: torch.Tensor, source_y: float, target_y: float
+    ) -> torch.Tensor:
+        idx = self.idx_lookup[tensor_hash(x)]
+        raw_image = self._get_fmnist(idx)
+        if isinstance(target_y, torch.Tensor):
+            target_y = target_y.item()
+        blurred = self.blur(raw_image, target_y)
+        blurred = torch.tensor(blurred, dtype=torch.float32)
+        blurred = torch.unsqueeze(blurred, dim=0)
+        blurred = self.normalize(blurred)
+        return blurred
+
+    def blur(self, x: torch.Tensor, amount: float) -> torch.Tensor:
+        radius = self.denormalize_label(amount)
+        kernel = (np.sqrt(self.kernel_x ** 2 + self.kernel_y ** 2) < radius).astype(
+            float
+        )
+        kernel /= kernel.sum()
+        blurred = cv.filter2D(x, -1, kernel)
+        blurred = np.clip(blurred, 0, 1)
+        return blurred
+
+    def add_noise(self, x: torch.Tensor) -> torch.Tensor:
+        noisy = np.random.poisson(x / self.poisson_amount) * self.poisson_amount
+        noisy = np.clip(noisy, -1, 1)
+        return noisy
+
+    def transform_image(
+        self, image: Union[np.ndarray, torch.Tensor], factor: float
+    ) -> torch.Tensor:
+        if isinstance(image, torch.Tensor):
+            image = image.cpu().numpy()
+        if isinstance(factor, torch.Tensor):
+            factor = factor.item()
+        image = np.squeeze(image)
+        blurred = self.blur(image, factor)
+        noisy = self.add_noise(blurred)
+        noisy = torch.tensor(noisy, dtype=torch.float32)
+        noisy = torch.unsqueeze(noisy, dim=0)
+        return noisy
+
+    def performance(
+        self,
+        real_images,
+        real_labels,
+        fake_images,
+        fake_labels,
+        reduction: ReductionType,
+    ) -> DataclassType:
+        ground_truths = self.ground_truths(real_images, real_labels, fake_labels)
+        ground_truths = torch.tensor(ground_truths, device=fake_images.device)
+        mae = torch.mean(torch.abs(ground_truths - fake_images), dim=[1, 2, 3])
+        frob = torch.linalg.norm(ground_truths - fake_images, dim=[1, 2, 3])
+        return_values = RotationFashionMNISTPerformance(mae, frob)
+        if reduction is ReductionType.MEAN:
+            reduce = lambda x: torch.mean(x)
+        elif reduction is ReductionType.SUM:
+            reduce = lambda x: torch.sum(x)
+        elif reduction is ReductionType.NONE:
+            reduce = lambda x: x
+        return_values = return_values.map(reduce)
+        return return_values
+
+    def __getitem__(self, index: int) -> Tuple[torch.Tensor, torch.Tensor]:
+        if self.mode is DataSplit.VAL:
+            index += self.len_train
+        return self.blurred_xs[index], self.blurred_ys[index]
+
+
 if __name__ == "__main__":
     # dataset = HSVFashionMNIST("FashionMNIST/", download=True)
-    dataset = RotationFashionMNIST("FashionMNIST/", download=True)
+    # dataset = RotationFashionMNIST("/storage/data/FashionMNIST/", download=True)
+    dataset = BlurredFashionMNIST(
+        "/storage/data/FashionMNIST/", download=True, max_blur=3
+    )
     import matplotlib.pyplot as plt
 
     x, y = dataset[0]
+    plt.figure(0)
+    combined = np.concatenate(
+        [dataset.ground_truth(x, y, t) for t in np.linspace(0, 1, num=5)], axis=2
+    )
+    combined = np.moveaxis(combined, 0, -1)
+    plt.imshow(combined, cmap="gray")
     z = dataset.ground_truth(x, y, y)
     z2 = dataset.ground_truth(x, y, 0.5)
     x = dataset.denormalize(x)
     z = dataset.denormalize(z)
     z2 = dataset.denormalize(z2)
-    plt.figure(0)
+    plt.figure(1)
     combined = np.concatenate((x, z, z2), axis=2)
     combined = np.moveaxis(combined, 0, -1)
-    plt.imshow(combined)
+    plt.imshow(combined, cmap="gray")
 
-    plt.figure(1)
+    plt.figure(2)
     for i in range(25):
         ax = plt.subplot(5, 5, i + 1)
         x, y = dataset[i]
         x, y = x.numpy(), y.numpy()
         x = dataset.denormalize(x)
         x = np.moveaxis(x, 0, -1)
-        ax.imshow(x)
+        ax.imshow(x, cmap="gray")
         ax.axis("off")
         ax.title.set_text(f"H={y.item():.3f}")
     plt.tight_layout()
-    plt.figure(2)
+    plt.figure(3)
     plt.hist(dataset.ys, bins=100)
     plt.show()
