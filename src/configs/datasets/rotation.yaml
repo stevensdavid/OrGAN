@@ -1,0 +1,9 @@
+class: data.fashion_mnist.RotationFashionMNIST
+kwargs:
+  root: /storage/data/FashionMNIST
+  train: true
+  download: true
+  n_clusters: null # Use continuous labels
+  noisy_labels: false
+  min_angle: 0.0
+  max_angle: 0.5 # only use half of rotation range to avoid cycle
