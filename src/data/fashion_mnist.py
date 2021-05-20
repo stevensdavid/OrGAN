@@ -38,6 +38,12 @@ class HSVFashionMNISTPerformance(DataclassExtensions):
     rgb_l2: Union[torch.Tensor, Metric]
 
 
+@dataclass
+class RotationFashionMNISTPerformance(DataclassExtensions):
+    mae: Union[torch.Tensor, Metric]
+    frobenius_norm: Union[torch.Tensor, Metric]
+
+
 class BaseFashionMNIST(FashionMNIST, AbstractDataset, ABC):
     def __init__(
         self,
@@ -444,9 +450,19 @@ class RotationFashionMNIST(BaseFashionMNIST):
         fake_labels,
         reduction: ReductionType,
     ) -> DataclassType:
-        return super().performance(
-            real_images, real_labels, fake_images, fake_labels, reduction
-        )
+        ground_truths = self.ground_truths(real_images, real_labels, fake_labels)
+        ground_truths = torch.tensor(ground_truths, device=fake_images.device)
+        mae = torch.mean(torch.abs(ground_truths - fake_images), dim=[1, 2, 3])
+        frob = torch.linalg.norm(ground_truths - fake_images, dim=[1, 2, 3])
+        return_values = RotationFashionMNISTPerformance(mae, frob)
+        if reduction is ReductionType.MEAN:
+            reduce = lambda x: torch.mean(x)
+        elif reduction is ReductionType.SUM:
+            reduce = lambda x: torch.sum(x)
+        elif reduction is ReductionType.NONE:
+            reduce = lambda x: x
+        return_values = return_values.map(reduce)
+        return return_values
 
 
 if __name__ == "__main__":
