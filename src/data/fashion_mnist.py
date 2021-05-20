@@ -1,3 +1,4 @@
+from abc import ABC, abstractmethod
 from dataclasses import dataclass
 from typing import Callable, List, Optional, Tuple, Union
 
@@ -36,7 +37,7 @@ class HSVFashionMNISTPerformance(DataclassExtensions):
     rgb_l2: Union[torch.Tensor, Metric]
 
 
-class HSVFashionMNIST(FashionMNIST, AbstractDataset):
+class BaseFashionMNIST(FashionMNIST, AbstractDataset, ABC):
     def __init__(
         self,
         root: str,
@@ -120,7 +121,7 @@ class HSVFashionMNIST(FashionMNIST, AbstractDataset):
                 hue = y
                 if self.noisy_labels:
                     raise ValueError("Noisy labels not supported without fixed labels.")
-        x = self.shift_hue(x, hue)
+        x = self.transform(x, hue)
         # Scale to [-1,1]
         x = torch.tensor(x, dtype=torch.float32)
         y = torch.tensor([y], dtype=torch.float32)
@@ -151,94 +152,8 @@ class HSVFashionMNIST(FashionMNIST, AbstractDataset):
         x, y = self[0]
         return DataShape(y_dim=1, n_channels=x.shape[0], x_size=x.shape[1])
 
-    @staticmethod
-    def shift_hue(image: np.ndarray, factor: float) -> np.ndarray:
-        """Shift the hue of an image
-
-        Args:
-            image (np.ndarray): Grayscale image, between 0 and 1
-            factor (float): Between 0 and 1, the HSV hue value to shift by
-
-        Returns:
-            np.ndarray: Hue-shifted image
-        """
-        if len(image.shape) != 2:
-            raise AssertionError(f"Incorrect shape in shift_hue: {image.shape}")
-        x = skimage.color.gray2rgb(image)
-        x = skimage.color.rgb2hsv(x)
-        # Shift hue in HSV
-        x[:, :, 0] = factor.item() if isinstance(factor, torch.Tensor) else factor
-        # x[:, :, 0] %= 1 # Should be redundant as hues are [0,1)
-        # Saturate grayscale
-        x[:, :, 1] = 1
-        x = skimage.color.hsv2rgb(x)
-        x = np.moveaxis(x, -1, 0)  # Move channels to front
-        return x
-
-    def ground_truth(self, x: np.ndarray, y: float) -> np.ndarray:
-        if x.shape[0] != 3:
-            raise AssertionError(f"Incorrect shape in ground_truth: {x.shape}")
-        if isinstance(x, torch.Tensor):
-            x = x.cpu().numpy()
-        # Scale to [0,1]
-        x = self.denormalize(x)
-        x = np.moveaxis(x, 0, -1)
-        x = skimage.color.rgb2hsv(x)
-        x[:, :, 0] = y
-        x = skimage.color.hsv2rgb(x)
-        x = np.moveaxis(x, -1, 0)
-        # Scale back to [-1, 1]
-        x = self.normalize(x)
-        return x
-
     def ground_truths(self, xs: List[np.ndarray], ys: List[float]) -> np.ndarray:
         return np.asarray([self.ground_truth(x, y) for x, y in zip(xs, ys)])
-
-    def rgb_tensor_to_hsv(self, t: torch.Tensor) -> torch.Tensor:
-        x = t.cpu().numpy()
-        x = self.denormalize(x)
-        x = np.moveaxis(x, 1, -1)
-        x = skimage.color.rgb2hsv(x)
-        x = np.moveaxis(x, -1, 1)
-        return torch.tensor(x, device=t.device)
-
-    def performance(
-        self,
-        real_images,
-        real_labels,
-        fake_images,
-        fake_labels,
-        reduction: ReductionType,
-    ) -> HSVFashionMNISTPerformance:
-        ground_truths = self.ground_truths(real_images, fake_labels)
-        ground_truths = torch.tensor(ground_truths, device=fake_images.device)
-        rgb_l1 = torch.mean(torch.abs(ground_truths - fake_images), dim=[1, 2, 3])
-        rgb_l2 = torch.linalg.norm(ground_truths - fake_images, dim=[1, 2, 3])
-        hsv_truths = self.rgb_tensor_to_hsv(ground_truths)
-        hsv_fakes = self.rgb_tensor_to_hsv(fake_images)
-        h_error = torch.mean(
-            torch.abs(hsv_truths[:, 0, :, :] - hsv_fakes[:, 0, :, :]), dim=[1, 2]
-        )
-        s_error = torch.mean(
-            torch.abs(hsv_truths[:, 1, :, :] - hsv_fakes[:, 1, :, :]), dim=[1, 2]
-        )
-        v_error = torch.mean(
-            torch.abs(hsv_truths[:, 2, :, :] - hsv_fakes[:, 2, :, :]), dim=[1, 2]
-        )
-        hsv_l1 = torch.mean(torch.abs(hsv_truths - hsv_fakes), dim=[1, 2, 3])
-        hsv_l2 = torch.linalg.norm(hsv_truths - hsv_fakes, dim=[1, 2, 3])
-
-        return_values = HSVFashionMNISTPerformance(
-            h_error, s_error, v_error, hsv_l1, hsv_l2, rgb_l1, rgb_l2
-        )
-        if reduction is ReductionType.MEAN:
-            reduce = lambda x: torch.mean(x)
-        elif reduction is ReductionType.SUM:
-            reduce = lambda x: torch.sum(x)
-        elif reduction is ReductionType.NONE:
-            reduce = lambda x: x
-        return_values = return_values.map(reduce)
-        return return_values
 
     def stitch_examples(self, real_images, real_labels, fake_images, fake_labels):
         return [
@@ -289,7 +204,7 @@ class HSVFashionMNIST(FashionMNIST, AbstractDataset):
             worker_init_fn=seed_worker,
         )
         n_attempts = 100
-        total_performance = HSVFashionMNISTPerformance(*[[] for _ in range(7)])
+        total_performance = None
         for images, labels in tqdm(
             iter(data_loader), desc="Testing batch", total=len(data_loader)
         ):
@@ -304,12 +219,152 @@ class HSVFashionMNIST(FashionMNIST, AbstractDataset):
                 batch_performance = batch_performance.map(
                     lambda t: t.squeeze().tolist()
                 )
-                total_performance.extend(batch_performance)
+                if total_performance is None:
+                    total_performance = batch_performance
+                else:
+                    total_performance.extend(batch_performance)
         return total_performance.map(Metric.from_list)
+
+    @abstractmethod
+    def ground_truth(self, x: np.ndarray, y: float) -> np.ndarray:
+        ...
+
+    @staticmethod
+    @abstractmethod
+    def transform(image: np.ndarray, factor: float) -> np.ndarray:
+        ...
+
+    @abstractmethod
+    def performance(
+        self,
+        real_images,
+        real_labels,
+        fake_images,
+        fake_labels,
+        reduction: ReductionType,
+    ) -> DataclassType:
+        ...
+
+
+class HSVFashionMNIST(BaseFashionMNIST):
+    def __init__(
+        self,
+        root: str,
+        train: bool,
+        transform: Optional[Callable],
+        target_transform: Optional[Callable],
+        download: bool,
+        simplified: bool,
+        n_clusters: Optional[int],
+        noisy_labels: bool,
+        fixed_labels: bool,
+        min_hue: float,
+        max_hue: float,
+    ) -> None:
+        super().__init__(
+            root,
+            train=train,
+            transform=transform,
+            target_transform=target_transform,
+            download=download,
+            simplified=simplified,
+            n_clusters=n_clusters,
+            noisy_labels=noisy_labels,
+            fixed_labels=fixed_labels,
+            min_hue=min_hue,
+            max_hue=max_hue,
+        )
+
+    @staticmethod
+    def transform(image: np.ndarray, factor: float) -> np.ndarray:
+        """Shift the hue of an image
+
+        Args:
+            image (np.ndarray): Grayscale image, between 0 and 1
+            factor (float): Between 0 and 1, the HSV hue value to shift by
+
+        Returns:
+            np.ndarray: Hue-shifted image
+        """
+        if len(image.shape) != 2:
+            raise AssertionError(f"Incorrect shape in shift_hue: {image.shape}")
+        x = skimage.color.gray2rgb(image)
+        x = skimage.color.rgb2hsv(x)
+        # Shift hue in HSV
+        x[:, :, 0] = factor.item() if isinstance(factor, torch.Tensor) else factor
+        # x[:, :, 0] %= 1 # Should be redundant as hues are [0,1)
+        # Saturate grayscale
+        x[:, :, 1] = 1
+        x = skimage.color.hsv2rgb(x)
+        x = np.moveaxis(x, -1, 0)  # Move channels to front
+        return x
+
+    def ground_truth(self, x: np.ndarray, y: float) -> np.ndarray:
+        if x.shape[0] != 3:
+            raise AssertionError(f"Incorrect shape in ground_truth: {x.shape}")
+        if isinstance(x, torch.Tensor):
+            x = x.cpu().numpy()
+        # Scale to [0,1]
+        x = self.denormalize(x)
+        x = np.moveaxis(x, 0, -1)
+        x = skimage.color.rgb2hsv(x)
+        x[:, :, 0] = y
+        x = skimage.color.hsv2rgb(x)
+        x = np.moveaxis(x, -1, 0)
+        # Scale back to [-1, 1]
+        x = self.normalize(x)
+        return x
+
+    def rgb_tensor_to_hsv(self, t: torch.Tensor) -> torch.Tensor:
+        x = t.cpu().numpy()
+        x = self.denormalize(x)
+        x = np.moveaxis(x, 1, -1)
+        x = skimage.color.rgb2hsv(x)
+        x = np.moveaxis(x, -1, 1)
+        return torch.tensor(x, device=t.device)
+
+    def performance(
+        self,
+        real_images,
+        real_labels,
+        fake_images,
+        fake_labels,
+        reduction: ReductionType,
+    ) -> HSVFashionMNISTPerformance:
+        ground_truths = self.ground_truths(real_images, fake_labels)
+        ground_truths = torch.tensor(ground_truths, device=fake_images.device)
+        rgb_l1 = torch.mean(torch.abs(ground_truths - fake_images), dim=[1, 2, 3])
+        rgb_l2 = torch.linalg.norm(ground_truths - fake_images, dim=[1, 2, 3])
+        hsv_truths = self.rgb_tensor_to_hsv(ground_truths)
+        hsv_fakes = self.rgb_tensor_to_hsv(fake_images)
+        h_error = torch.mean(
+            torch.abs(hsv_truths[:, 0, :, :] - hsv_fakes[:, 0, :, :]), dim=[1, 2]
+        )
+        s_error = torch.mean(
+            torch.abs(hsv_truths[:, 1, :, :] - hsv_fakes[:, 1, :, :]), dim=[1, 2]
+        )
+        v_error = torch.mean(
+            torch.abs(hsv_truths[:, 2, :, :] - hsv_fakes[:, 2, :, :]), dim=[1, 2]
+        )
+        hsv_l1 = torch.mean(torch.abs(hsv_truths - hsv_fakes), dim=[1, 2, 3])
+        hsv_l2 = torch.linalg.norm(hsv_truths - hsv_fakes, dim=[1, 2, 3])
+
+        return_values = HSVFashionMNISTPerformance(
+            h_error, s_error, v_error, hsv_l1, hsv_l2, rgb_l1, rgb_l2
+        )
+        if reduction is ReductionType.MEAN:
+            reduce = lambda x: torch.mean(x)
+        elif reduction is ReductionType.SUM:
+            reduce = lambda x: torch.sum(x)
+        elif reduction is ReductionType.NONE:
+            reduce = lambda x: x
+        return_values = return_values.map(reduce)
+        return return_values
 
 
 if __name__ == "__main__":
     dataset = HSVFashionMNIST("FashionMNIST/", download=True)
+    dataset.test_model(None, 1024, 0, "cpu", lambda x: x)
     x = dataset.random_targets((30, 1))
     import matplotlib.pyplot as plt
 
