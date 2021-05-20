@@ -6,6 +6,7 @@ import numpy as np
 import skimage.color
 import torch
 import torch.linalg
+import torchvision.transforms.functional as F
 from models.abstract_model import AbstractGenerator
 from torch import nn
 from torch.cuda.amp.autocast_mode import autocast
@@ -101,13 +102,21 @@ class BaseFashionMNIST(FashionMNIST, AbstractDataset, ABC):
     def _getitem(self, index):
         return self[index]
 
+    def total_len(self) -> int:
+        return super().__len__()
+
+    def _get_fmnist(self, index: int) -> np.ndarray:
+        img = super().__getitem__(index)[0]
+        img = np.array(img, dtype=float)
+        img /= 255
+        img = np.pad(img, pad_width=2, constant_values=0)
+        return img
+
     def __getitem__(self, index: int) -> Tuple[torch.Tensor, torch.Tensor]:
         if self.mode is DataSplit.VAL:
             # We use first `self.len_train` samples for training set, so offset index
             index += self.len_train
-        x, _ = super().__getitem__(index)
-        x = np.array(x, dtype=float)
-        x /= 255  # Normalize for hue shift
+        x = self._get_fmnist(index)
         if self.fixed_labels:
             y = self.ys[index]
             hue = self.hues[index]
@@ -121,11 +130,11 @@ class BaseFashionMNIST(FashionMNIST, AbstractDataset, ABC):
                 hue = y
                 if self.noisy_labels:
                     raise ValueError("Noisy labels not supported without fixed labels.")
-        x = self.transform(x, hue)
+        x = self.transform_image(x, hue)
         # Scale to [-1,1]
-        x = torch.tensor(x, dtype=torch.float32)
+        if isinstance(x, np.ndarray):
+            x = torch.tensor(x, dtype=torch.float32)
         y = torch.tensor([y], dtype=torch.float32)
-        x = self.pad(x)  # Zero-pads 28x28 to 32x32
         x = self.normalize(x)
         return x, y
 
@@ -152,18 +161,29 @@ class BaseFashionMNIST(FashionMNIST, AbstractDataset, ABC):
         x, y = self[0]
         return DataShape(y_dim=1, n_channels=x.shape[0], x_size=x.shape[1])
 
-    def ground_truths(self, xs: List[np.ndarray], ys: List[float]) -> np.ndarray:
-        return np.asarray([self.ground_truth(x, y) for x, y in zip(xs, ys)])
+    def ground_truths(
+        self, xs: List[np.ndarray], source_ys: List[float], target_ys: List[float]
+    ) -> np.ndarray:
+        return np.asarray(
+            [
+                self.ground_truth(x, y_in, y_out)
+                for x, y_in, y_out in zip(xs, source_ys, target_ys)
+            ]
+        )
 
     def stitch_examples(self, real_images, real_labels, fake_images, fake_labels):
         return [
             GeneratedExamples(
                 self.denormalize(
-                    stitch_images([real, fake, self.ground_truth(real, target)])
+                    stitch_images(
+                        [real, fake, self.ground_truth(real, real_label, target_label)]
+                    )
                 ),
-                f"H={target}",
+                f"H={target_label}",
             )
-            for real, fake, target in zip(real_images, fake_images, fake_labels)
+            for real, fake, real_label, target_label in zip(
+                real_images, fake_images, real_labels, fake_labels
+            )
         ]
 
     def stitch_interpolations(
@@ -179,7 +199,9 @@ class BaseFashionMNIST(FashionMNIST, AbstractDataset, ABC):
         domain = self.label_domain()
         steps = interpolations.shape[0]
         targets = torch.linspace(domain.min, domain.max, steps)
-        ground_truths = [self.ground_truth(source_image, y) for y in targets]
+        ground_truths = [
+            self.ground_truth(source_image, source_label, y) for y in targets
+        ]
         stitched_truths = stitch_images([np.zeros_like(source_image)] + ground_truths)
         stitched_results = np.concatenate([model_interps, stitched_truths], axis=0)
         return GeneratedExamples(
@@ -226,12 +248,13 @@ class BaseFashionMNIST(FashionMNIST, AbstractDataset, ABC):
         return total_performance.map(Metric.from_list)
 
     @abstractmethod
-    def ground_truth(self, x: np.ndarray, y: float) -> np.ndarray:
+    def ground_truth(
+        self, x: np.ndarray, source_y: float, target_y: float
+    ) -> np.ndarray:
         ...
 
-    @staticmethod
     @abstractmethod
-    def transform(image: np.ndarray, factor: float) -> np.ndarray:
+    def transform_image(self, image: np.ndarray, factor: float) -> np.ndarray:
         ...
 
     @abstractmethod
@@ -250,16 +273,16 @@ class HSVFashionMNIST(BaseFashionMNIST):
     def __init__(
         self,
         root: str,
-        train: bool,
-        transform: Optional[Callable],
-        target_transform: Optional[Callable],
-        download: bool,
-        simplified: bool,
-        n_clusters: Optional[int],
-        noisy_labels: bool,
-        fixed_labels: bool,
-        min_hue: float,
-        max_hue: float,
+        train: bool = True,
+        transform: Optional[Callable] = None,
+        target_transform: Optional[Callable] = None,
+        download: bool = False,
+        simplified: bool = False,
+        n_clusters: Optional[int] = None,
+        noisy_labels: bool = True,
+        fixed_labels: bool = True,
+        min_hue: float = 0.0,
+        max_hue: float = 1.0,
     ) -> None:
         super().__init__(
             root,
@@ -275,8 +298,7 @@ class HSVFashionMNIST(BaseFashionMNIST):
             max_hue=max_hue,
         )
 
-    @staticmethod
-    def transform(image: np.ndarray, factor: float) -> np.ndarray:
+    def transform_image(self, image: np.ndarray, factor: float) -> np.ndarray:
         """Shift the hue of an image
 
         Args:
@@ -299,7 +321,9 @@ class HSVFashionMNIST(BaseFashionMNIST):
         x = np.moveaxis(x, -1, 0)  # Move channels to front
         return x
 
-    def ground_truth(self, x: np.ndarray, y: float) -> np.ndarray:
+    def ground_truth(
+        self, x: np.ndarray, source_y: float, target_y: float
+    ) -> np.ndarray:
         if x.shape[0] != 3:
             raise AssertionError(f"Incorrect shape in ground_truth: {x.shape}")
         if isinstance(x, torch.Tensor):
@@ -308,7 +332,7 @@ class HSVFashionMNIST(BaseFashionMNIST):
         x = self.denormalize(x)
         x = np.moveaxis(x, 0, -1)
         x = skimage.color.rgb2hsv(x)
-        x[:, :, 0] = y
+        x[:, :, 0] = target_y
         x = skimage.color.hsv2rgb(x)
         x = np.moveaxis(x, -1, 0)
         # Scale back to [-1, 1]
@@ -331,7 +355,7 @@ class HSVFashionMNIST(BaseFashionMNIST):
         fake_labels,
         reduction: ReductionType,
     ) -> HSVFashionMNISTPerformance:
-        ground_truths = self.ground_truths(real_images, fake_labels)
+        ground_truths = self.ground_truths(real_images, real_labels, fake_labels)
         ground_truths = torch.tensor(ground_truths, device=fake_images.device)
         rgb_l1 = torch.mean(torch.abs(ground_truths - fake_images), dim=[1, 2, 3])
         rgb_l2 = torch.linalg.norm(ground_truths - fake_images, dim=[1, 2, 3])
@@ -362,17 +386,82 @@ class HSVFashionMNIST(BaseFashionMNIST):
         return return_values
 
 
+class RotationFashionMNIST(BaseFashionMNIST):
+    def __init__(
+        self,
+        root: str,
+        train: bool = True,
+        transform: Optional[Callable] = None,
+        target_transform: Optional[Callable] = None,
+        download: bool = False,
+        simplified: bool = False,
+        n_clusters: Optional[int] = None,
+        noisy_labels: bool = False,
+        fixed_labels: bool = True,
+        min_angle: float = 0.0,
+        max_angle: float = 0.5,
+    ) -> None:
+        super().__init__(
+            root,
+            train=train,
+            transform=transform,
+            target_transform=target_transform,
+            download=download,
+            simplified=simplified,
+            n_clusters=n_clusters,
+            noisy_labels=noisy_labels,
+            fixed_labels=fixed_labels,
+            min_hue=min_angle,
+            max_hue=max_angle,
+        )
+
+    def ground_truth(
+        self, x: np.ndarray, source_y: float, target_y: float
+    ) -> np.ndarray:
+        x = self.denormalize(x)
+        unrotated = self.transform_image(x, -source_y)
+        rotated = self.transform_image(unrotated, target_y)
+        return self.normalize(x)
+
+    def transform_image(
+        self, image: Union[np.ndarray, torch.Tensor], factor: float
+    ) -> torch.Tensor:
+        if isinstance(image, np.ndarray):
+            if len(image.shape) == 2:
+                image = np.expand_dims(image, -1)
+            image = np.moveaxis(image, -1, 0)
+            image = torch.tensor(image, dtype=torch.float32)
+        if isinstance(factor, torch.Tensor):
+            factor = factor.item()
+        rotated = F.rotate(image, angle=factor * 360)
+        return rotated
+
+    def performance(
+        self,
+        real_images,
+        real_labels,
+        fake_images,
+        fake_labels,
+        reduction: ReductionType,
+    ) -> DataclassType:
+        return super().performance(
+            real_images, real_labels, fake_images, fake_labels, reduction
+        )
+
+
 if __name__ == "__main__":
-    dataset = HSVFashionMNIST("FashionMNIST/", download=True)
-    dataset.test_model(None, 1024, 0, "cpu", lambda x: x)
-    x = dataset.random_targets((30, 1))
+    # dataset = HSVFashionMNIST("FashionMNIST/", download=True)
+    dataset = RotationFashionMNIST("FashionMNIST/", download=True)
     import matplotlib.pyplot as plt
 
     x, y = dataset[0]
     z = dataset.ground_truth(x, y, y)
     z2 = dataset.ground_truth(x, y, 0.5)
+    x = dataset.denormalize(x)
+    z = dataset.denormalize(z)
+    z2 = dataset.denormalize(z2)
     plt.figure(0)
-    combined = np.concatenate((x, z, z2), axis=1)
+    combined = np.concatenate((x, z, z2), axis=2)
     combined = np.moveaxis(combined, 0, -1)
     plt.imshow(combined)
 
@@ -381,6 +470,7 @@ if __name__ == "__main__":
         ax = plt.subplot(5, 5, i + 1)
         x, y = dataset[i]
         x, y = x.numpy(), y.numpy()
+        x = dataset.denormalize(x)
         x = np.moveaxis(x, 0, -1)
         ax.imshow(x)
         ax.axis("off")
