@@ -427,7 +427,9 @@ class RotationFashionMNIST(BaseFashionMNIST):
         x = self.denormalize(x)
         unrotated = self.transform_image(x, -source_y)
         rotated = self.transform_image(unrotated, target_y)
-        return self.normalize(x)
+        rotated = self.normalize(rotated)
+        rotated = rotated.cpu().numpy()
+        return rotated
 
     def transform_image(
         self, image: Union[np.ndarray, torch.Tensor], factor: float

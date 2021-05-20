@@ -33,7 +33,10 @@ def relativistic_loss(real_sources, real_average, fake_sources, sample_weights):
 def stitch_images(images: List[torch.Tensor], dim=2) -> np.ndarray:
     for idx, image in enumerate(images):
         if image.shape[0] == 1:
-            images[idx] = torch.repeat_interleave(image, 3, dim=0)
+            if isinstance(image, torch.Tensor):
+                images[idx] = torch.repeat_interleave(image, 3, dim=0)
+            elif isinstance(image, np.ndarray):
+                images[idx] = np.repeat(image, 3, axis=0)
     merged = np.concatenate(images, axis=dim)
     return np.moveaxis(merged, 0, -1)  # move channels to end
 
