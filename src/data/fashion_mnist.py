@@ -1,3 +1,5 @@
+import os
+import pickle
 from abc import ABC, abstractmethod
 from dataclasses import dataclass
 from typing import Callable, List, Optional, Tuple, Union
@@ -504,14 +506,24 @@ class BlurredFashionMNIST(BaseFashionMNIST):
         self.kernel_x, self.kernel_y = np.mgrid[
             -y_size / 2 : y_size / 2, -x_size / 2 : x_size / 2
         ]
-        self.poisson_amount = 1e-3
-        self.blurred_xs, self.blurred_ys = [], []
-        self.idx_lookup = {}
-        for idx in range(self.total_len()):
-            x, y = super().__getitem__(idx)
-            self.blurred_xs.append(x)
-            self.blurred_ys.append(y)
-            self.idx_lookup[tensor_hash(x)] = idx
+        self.poisson_amount = 1e-4
+        attributes = ["blurred_xs", "blurred_ys", "idx_lookup"]
+        try:
+            for attr in attributes:
+                with open(os.path.join(root, f"{attr}.pkl"), "rb") as f:
+                    setattr(self, attr, pickle.load(f))
+        except FileNotFoundError:
+            print("Preprocessing dataset. This will be done once.")
+            self.blurred_xs, self.blurred_ys = [], []
+            self.idx_lookup = {}
+            for idx in trange(self.total_len(), desc="Preprocessing"):
+                x, y = super().__getitem__(idx)
+                self.blurred_xs.append(x)
+                self.blurred_ys.append(y)
+                self.idx_lookup[tensor_hash(x)] = idx
+            for attr in attributes:
+                with open(os.path.join(root, f"{attr}.pkl"), "wb") as f:
+                    pickle.dump(getattr(self, attr), f)
 
     def normalize_label(self, y: float) -> float:
         return (y - self.min_blur) / (self.max_blur - self.min_blur)
