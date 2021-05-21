@@ -16,8 +16,14 @@ from torch.nn.functional import conv2d
 from torch.utils.data.dataloader import DataLoader
 from torchvision.datasets import FashionMNIST
 from tqdm import tqdm, trange
-from util.dataclasses import (DataclassExtensions, DataclassType, DataShape,
-                              GeneratedExamples, LabelDomain, Metric)
+from util.dataclasses import (
+    DataclassExtensions,
+    DataclassType,
+    DataShape,
+    GeneratedExamples,
+    LabelDomain,
+    Metric,
+)
 from util.enums import DataSplit, ReductionType
 from util.pytorch_utils import ndarray_hash, seed_worker, stitch_images
 
@@ -496,6 +502,8 @@ class BlurredFashionMNIST(BaseFashionMNIST):
             min_hue=0,
             max_hue=1,
         )
+        self.len_train = 400
+        self.len_val = 400
         x_size, y_size = 32, 32
         self.kernel_x, self.kernel_y = np.mgrid[
             -y_size / 2 : y_size / 2, -x_size / 2 : x_size / 2
@@ -529,7 +537,7 @@ class BlurredFashionMNIST(BaseFashionMNIST):
 
     def ground_truth(
         self, x: torch.Tensor, source_y: float, target_y: float
-    ) -> torch.Tensor:
+    ) -> np.ndarray:
         if isinstance(x, np.ndarray):
             x = torch.tensor(x, dtype=torch.float32)
         idx = self.idx_lookup[ndarray_hash(x.cpu().numpy())]
@@ -540,7 +548,7 @@ class BlurredFashionMNIST(BaseFashionMNIST):
             target_y = target_y.item()
         blurred = self.blur(raw_image, target_y)
         blurred = self.normalize(blurred)
-        return blurred
+        return blurred.cpu().numpy()
 
     def blur(self, x: torch.Tensor, amount: float) -> torch.Tensor:
         radius = self.denormalize_label(amount)
