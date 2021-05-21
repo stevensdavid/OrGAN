@@ -502,8 +502,6 @@ class BlurredFashionMNIST(BaseFashionMNIST):
             min_hue=0,
             max_hue=1,
         )
-        self.len_train = 400
-        self.len_val = 400
         x_size, y_size = 32, 32
         self.kernel_x, self.kernel_y = np.mgrid[
             -y_size / 2 : y_size / 2, -x_size / 2 : x_size / 2
