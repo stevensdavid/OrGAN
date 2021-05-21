@@ -511,7 +511,7 @@ class BlurredFashionMNIST(BaseFashionMNIST):
         self.len_train = 400
         self.blurred_xs, self.blurred_ys = [], []
         self.idx_lookup = {}
-        for idx in trange(self.total_len()):
+        for idx in range(self.total_len()):
             x, y = super().__getitem__(idx)
             self.blurred_xs.append(x)
             self.blurred_ys.append(y)
