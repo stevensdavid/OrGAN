@@ -307,7 +307,6 @@ class HSVFashionMNIST(BaseFashionMNIST):
             min_hue=min_hue,
             max_hue=max_hue,
         )
-        self.len_train = 400
 
     def transform_image(self, image: np.ndarray, factor: float) -> np.ndarray:
         """Shift the hue of an image
@@ -425,7 +424,6 @@ class RotationFashionMNIST(BaseFashionMNIST):
             min_hue=min_angle,
             max_hue=max_angle,
         )
-        self.len_train = 400
 
     def ground_truth(
         self, x: np.ndarray, source_y: float, target_y: float
@@ -508,7 +506,6 @@ class BlurredFashionMNIST(BaseFashionMNIST):
             -y_size / 2 : y_size / 2, -x_size / 2 : x_size / 2
         ]
         self.poisson_amount = 1e-3
-        self.len_train = 400
         self.blurred_xs, self.blurred_ys = [], []
         self.idx_lookup = {}
         for idx in range(self.total_len()):
