@@ -488,8 +488,8 @@ class BlurredFashionMNIST(BaseFashionMNIST):
         min_blur: float = 0,
         max_blur: float = 3,
     ) -> None:
-        self.normalize_label = lambda y: (y - min_blur) / (max_blur - min_blur)
-        self.denormalize_label = lambda y: y * (max_blur - min_blur) + min_blur
+        self.min_blur = min_blur
+        self.max_blur = max_blur
         super().__init__(
             root,
             train=train,
@@ -516,6 +516,12 @@ class BlurredFashionMNIST(BaseFashionMNIST):
             self.blurred_xs.append(x)
             self.blurred_ys.append(y)
             self.idx_lookup[tensor_hash(x)] = idx
+
+    def normalize_label(self, y: float) -> float:
+        return (y - self.min_blur) / (self.max_blur - self.min_blur)
+
+    def denormalize_label(self, y: float) -> float:
+        return y * (self.max_blur - self.min_blur) + self.min_blur
 
     def ground_truth(
         self, x: torch.Tensor, source_y: float, target_y: float
