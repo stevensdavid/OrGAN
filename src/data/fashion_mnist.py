@@ -485,8 +485,8 @@ class BlurredFashionMNIST(BaseFashionMNIST):
         n_clusters: Optional[int] = None,
         noisy_labels: bool = False,
         fixed_labels: bool = True,
-        min_blur: float = 1,
-        max_blur: float = 5,
+        min_blur: float = 0,
+        max_blur: float = 3,
     ) -> None:
         self.normalize_label = lambda y: (y - min_blur) / (max_blur - min_blur)
         self.denormalize_label = lambda y: y * (max_blur - min_blur) + min_blur
@@ -532,9 +532,14 @@ class BlurredFashionMNIST(BaseFashionMNIST):
 
     def blur(self, x: torch.Tensor, amount: float) -> torch.Tensor:
         radius = self.denormalize_label(amount)
-        kernel = (np.sqrt(self.kernel_x ** 2 + self.kernel_y ** 2) < radius).astype(
-            float
+        if radius == 0:
+            return x
+        exponent = -(
+            self.kernel_x ** 2 / float(radius ** 2)
+            + self.kernel_y ** 2 / float(radius ** 2)
         )
+        exponent = np.clip(exponent, -16, 0)
+        kernel = np.exp(exponent)
         kernel /= kernel.sum()
         blurred = cv.filter2D(x, -1, kernel)
         blurred = np.clip(blurred, 0, 1)
@@ -591,14 +596,14 @@ if __name__ == "__main__":
     # dataset = HSVFashionMNIST("FashionMNIST/", download=True)
     # dataset = RotationFashionMNIST("/storage/data/FashionMNIST/", download=True)
     dataset = BlurredFashionMNIST(
-        "/storage/data/FashionMNIST/", download=True, max_blur=3
+        "/storage/data/FashionMNIST/", download=True, max_blur=3, min_blur=0
     )
     import matplotlib.pyplot as plt
 
     x, y = dataset[0]
     plt.figure(0)
     combined = np.concatenate(
-        [dataset.ground_truth(x, y, t) for t in np.linspace(0, 1, num=5)], axis=2
+        [dataset.ground_truth(x, y, t) for t in np.linspace(0, 1, num=20)], axis=2
     )
     combined = np.moveaxis(combined, 0, -1)
     plt.imshow(combined, cmap="gray")
