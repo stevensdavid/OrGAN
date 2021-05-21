@@ -6,4 +6,4 @@ kwargs:
   n_clusters: null # Use continuous labels
   noisy_labels: false
   min_blur: 0.0
-  max_blur: 3
+  max_blur: 2

@@ -2,7 +2,6 @@ from abc import ABC, abstractmethod
 from dataclasses import dataclass
 from typing import Callable, List, Optional, Tuple, Union
 
-import cv2 as cv
 import numpy as np
 import skimage.color
 import torch
@@ -484,7 +483,7 @@ class BlurredFashionMNIST(BaseFashionMNIST):
         noisy_labels: bool = False,
         fixed_labels: bool = True,
         min_blur: float = 0,
-        max_blur: float = 3,
+        max_blur: float = 2,
     ) -> None:
         self.min_blur = min_blur
         self.max_blur = max_blur
@@ -523,13 +522,15 @@ class BlurredFashionMNIST(BaseFashionMNIST):
     def ground_truth(
         self, x: torch.Tensor, source_y: float, target_y: float
     ) -> torch.Tensor:
+        if isinstance(x, np.ndarray):
+            x = torch.tensor(x, dtype=torch.float32)
         idx = self.idx_lookup[tensor_hash(x)]
         raw_image = self._get_fmnist(idx)
+        raw_image = torch.tensor(raw_image, dtype=torch.float32)
+        raw_image = torch.unsqueeze(raw_image, dim=0)
         if isinstance(target_y, torch.Tensor):
             target_y = target_y.item()
         blurred = self.blur(raw_image, target_y)
-        blurred = torch.tensor(blurred, dtype=torch.float32)
-        blurred = torch.unsqueeze(blurred, dim=0)
         blurred = self.normalize(blurred)
         return blurred
 
@@ -537,34 +538,24 @@ class BlurredFashionMNIST(BaseFashionMNIST):
         radius = self.denormalize_label(amount)
         if radius == 0:
             return x
-        exponent = -(
-            self.kernel_x ** 2 / float(radius ** 2)
-            + self.kernel_y ** 2 / float(radius ** 2)
-        )
-        exponent = np.clip(exponent, -16, 0)
-        kernel = np.exp(exponent)
-        kernel /= kernel.sum()
-        blurred = cv.filter2D(x, -1, kernel)
-        blurred = np.clip(blurred, 0, 1)
+        blurred = F.gaussian_blur(x, kernel_size=31, sigma=radius)
         return blurred
 
     def add_noise(self, x: torch.Tensor) -> torch.Tensor:
-        noisy = np.random.poisson(x / self.poisson_amount) * self.poisson_amount
-        noisy = np.clip(noisy, -1, 1)
+        noisy = torch.poisson(x / self.poisson_amount) * self.poisson_amount
+        noisy = torch.clip(noisy, 0, 1)
         return noisy
 
     def transform_image(
         self, image: Union[np.ndarray, torch.Tensor], factor: float
     ) -> torch.Tensor:
-        if isinstance(image, torch.Tensor):
-            image = image.cpu().numpy()
+        if isinstance(image, np.ndarray):
+            image = torch.tensor(image, dtype=torch.float32)
         if isinstance(factor, torch.Tensor):
             factor = factor.item()
-        image = np.squeeze(image)
+        image = image.unsqueeze(dim=0)
         blurred = self.blur(image, factor)
         noisy = self.add_noise(blurred)
-        noisy = torch.tensor(noisy, dtype=torch.float32)
-        noisy = torch.unsqueeze(noisy, dim=0)
         return noisy
 
     def performance(
@@ -599,7 +590,7 @@ if __name__ == "__main__":
     # dataset = HSVFashionMNIST("FashionMNIST/", download=True)
     # dataset = RotationFashionMNIST("/storage/data/FashionMNIST/", download=True)
     dataset = BlurredFashionMNIST(
-        "/storage/data/FashionMNIST/", download=True, max_blur=3, min_blur=0
+        "/storage/data/FashionMNIST/", download=True, max_blur=2, min_blur=0
     )
     import matplotlib.pyplot as plt
 
