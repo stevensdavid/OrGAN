@@ -1,3 +1,4 @@
+import hashlib
 import os
 import random
 from typing import List
@@ -24,7 +25,9 @@ class ConditionalInstanceNorm2d(nn.Module):
 
 
 def tensor_hash(x: torch.Tensor) -> int:
-    return hash(x.numpy().tobytes())
+    hasher = hashlib.sha256()
+    hasher.update(x.numpy().tobytes())
+    return hasher.digest()
 
 
 def relativistic_loss(real_sources, real_average, fake_sources, sample_weights):
