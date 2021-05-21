@@ -24,9 +24,9 @@ class ConditionalInstanceNorm2d(nn.Module):
         return out
 
 
-def tensor_hash(x: torch.Tensor) -> int:
+def ndarray_hash(x: np.ndarray) -> int:
     hasher = hashlib.sha256()
-    hasher.update(x.numpy().tobytes())
+    hasher.update(x.tobytes())
     return hasher.digest()
 
 

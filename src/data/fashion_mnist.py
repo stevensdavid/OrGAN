@@ -25,7 +25,7 @@ from util.dataclasses import (
     Metric,
 )
 from util.enums import DataSplit, ReductionType
-from util.pytorch_utils import seed_worker, stitch_images, tensor_hash
+from util.pytorch_utils import ndarray_hash, seed_worker, stitch_images
 
 from data.abstract_classes import AbstractDataset
 
@@ -518,9 +518,11 @@ class BlurredFashionMNIST(BaseFashionMNIST):
             self.idx_lookup = {}
             for idx in trange(self.total_len(), desc="Preprocessing"):
                 x, y = super().__getitem__(idx)
+                x = x.numpy()
+                y = y.numpy()
                 self.blurred_xs.append(x)
                 self.blurred_ys.append(y)
-                self.idx_lookup[tensor_hash(x)] = idx
+                self.idx_lookup[ndarray_hash(x)] = idx
             for attr in attributes:
                 with open(os.path.join(root, f"{attr}.pkl"), "wb") as f:
                     pickle.dump(getattr(self, attr), f)
@@ -536,7 +538,7 @@ class BlurredFashionMNIST(BaseFashionMNIST):
     ) -> torch.Tensor:
         if isinstance(x, np.ndarray):
             x = torch.tensor(x, dtype=torch.float32)
-        idx = self.idx_lookup[tensor_hash(x)]
+        idx = self.idx_lookup[ndarray_hash(x.numpy())]
         raw_image = self._get_fmnist(idx)
         raw_image = torch.tensor(raw_image, dtype=torch.float32)
         raw_image = torch.unsqueeze(raw_image, dim=0)
@@ -595,7 +597,10 @@ class BlurredFashionMNIST(BaseFashionMNIST):
     def __getitem__(self, index: int) -> Tuple[torch.Tensor, torch.Tensor]:
         if self.mode is DataSplit.VAL:
             index += self.len_train
-        return self.blurred_xs[index], self.blurred_ys[index]
+        x, y = self.blurred_xs[index], self.blurred_ys[index]
+        x = torch.tensor(x, dtype=torch.float32)
+        y = torch.tensor(y, dtype=torch.float32)
+        return x, y
 
 
 if __name__ == "__main__":
