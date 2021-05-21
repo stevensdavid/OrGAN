@@ -23,6 +23,10 @@ class ConditionalInstanceNorm2d(nn.Module):
         return out
 
 
+def tensor_hash(x: torch.Tensor) -> int:
+    return hash(x.numpy().tobytes())
+
+
 def relativistic_loss(real_sources, real_average, fake_sources, sample_weights):
     fake_average = torch.mean(fake_sources)
     real_loss = torch.mean(sample_weights * (real_sources - fake_average + 1) ** 2)
