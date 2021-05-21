@@ -16,14 +16,8 @@ from torch.nn.functional import conv2d
 from torch.utils.data.dataloader import DataLoader
 from torchvision.datasets import FashionMNIST
 from tqdm import tqdm, trange
-from util.dataclasses import (
-    DataclassExtensions,
-    DataclassType,
-    DataShape,
-    GeneratedExamples,
-    LabelDomain,
-    Metric,
-)
+from util.dataclasses import (DataclassExtensions, DataclassType, DataShape,
+                              GeneratedExamples, LabelDomain, Metric)
 from util.enums import DataSplit, ReductionType
 from util.pytorch_utils import ndarray_hash, seed_worker, stitch_images
 
@@ -538,7 +532,7 @@ class BlurredFashionMNIST(BaseFashionMNIST):
     ) -> torch.Tensor:
         if isinstance(x, np.ndarray):
             x = torch.tensor(x, dtype=torch.float32)
-        idx = self.idx_lookup[ndarray_hash(x.numpy())]
+        idx = self.idx_lookup[ndarray_hash(x.cpu().numpy())]
         raw_image = self._get_fmnist(idx)
         raw_image = torch.tensor(raw_image, dtype=torch.float32)
         raw_image = torch.unsqueeze(raw_image, dim=0)
