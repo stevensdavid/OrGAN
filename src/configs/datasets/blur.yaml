@@ -1,0 +1,9 @@
+class: data.fashion_mnist.BlurredFashionMNIST
+kwargs:
+  root: /storage/data/FashionMNIST
+  train: true
+  download: true
+  n_clusters: null # Use continuous labels
+  noisy_labels: false
+  min_blur: 0.0
+  max_blur: 3

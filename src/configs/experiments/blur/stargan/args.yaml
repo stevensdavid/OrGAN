@@ -1,0 +1,17 @@
+epochs: 100
+batch_size: 550
+data_config: configs/datasets/blur.yaml
+checkpoint_dir: /storage/checkpoints
+experiment_name: Clustered_HSV_StarGAN
+train_config: "configs/training.yaml"
+model: models.stargan.StarGAN
+model_hyperparams: configs/models/stargan.yaml
+n_nodes: 1
+n_gpus: 2
+n_workers: 5
+node_rank: 0
+embed_generator: false
+embed_discriminator: false
+discriminator_lr: 0.0002
+generator_lr: 0.0002
+optimizer: adam
