@@ -183,7 +183,8 @@ class BlurredIMDBWiki(IMDBWiki):
     def _get_unprocessed_image(self, index: int) -> torch.Tensor:
         filename = self.images[index]
         image = Image.open(filename)
-        return torch.tensor(image, dtype=torch.float32)
+        image = F.to_tensor(image)
+        return image
 
     def normalize_label(self, y: float) -> float:
         return (y - self.min_blur) / (self.max_blur - self.min_blur)
