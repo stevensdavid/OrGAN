@@ -80,6 +80,9 @@ class IMDBWiki(AbstractDataset):
     def random_targets(self, shape: torch.Size) -> torch.Tensor:
         return torch.rand(shape)
 
+    def total_len(self) -> int:
+        return self.len_train + self.len_test + self.len_val + self.len_holdout
+
     def _len(self) -> int:
         if self.mode is DataSplit.TRAIN:
             return self.len_train
