@@ -1,19 +1,35 @@
+from dataclasses import dataclass
 import json
 import os
 import random
-import re
-from logging import getLogger
-from typing import Callable, List, Optional, Tuple
+from typing import Callable, List, Optional, Tuple, Union
 
 import numpy as np
 import torch
 from models.abstract_model import AbstractGenerator
 from PIL import Image
 from torchvision import transforms
-from util.dataclasses import DataclassType, DataShape, LabelDomain
-from util.enums import DataSplit
+from util.dataclasses import (
+    DataclassExtensions,
+    DataclassType,
+    DataShape,
+    LabelDomain,
+    Metric,
+)
+import torchvision.transforms.functional as F
+from util.pytorch_utils import ndarray_hash
+from util.enums import DataSplit, ReductionType
 
 from data.abstract_classes import AbstractDataset
+import pickle
+from tqdm import trange
+
+
+@dataclass
+class BlurredIMDBWikiPerformance(DataclassExtensions):
+    mae: Union[torch.Tensor, Metric]
+    frobenius_norm: Union[torch.Tensor, Metric]
+    mse: Union[torch.Tensor, Metric]
 
 
 class IMDBWiki(AbstractDataset):
@@ -120,3 +136,112 @@ class IMDBWiki(AbstractDataset):
     def label_domain(self) -> Optional[LabelDomain]:
         return LabelDomain(0, 1)
 
+
+class BlurredIMDBWiki(IMDBWiki):
+    def __init__(
+        self, root: str, image_size: int = 128, min_blur: float = 0, max_blur: float = 5
+    ) -> None:
+        super().__init__(root, image_size=image_size)
+        self.min_label = min_blur
+        self.max_label = max_blur
+        x_size, y_size = image_size, image_size
+        self.kernel_x, self.kernel_y = np.mgrid[
+            -y_size / 2 : y_size / 2, -x_size / 2 : x_size / 2
+        ]
+        self.poisson_amount = 1e-3
+        attributes = ["blurred_xs", "blurred_ys", "idx_lookup"]
+
+        try:
+            for attr in attributes:
+                with open(os.path.join(root, f"{attr}.pkl"), "rb") as f:
+                    setattr(self, attr, pickle.load(f))
+        except FileNotFoundError:
+            print("Preprocessing dataset. This will be done once.")
+            self.blurred_xs, self.blurred_ys = [], []
+            self.idx_lookup = {}
+            for idx in trange(self.total_len(), desc="Preprocessing"):
+                x, y = super().__getitem__(idx)
+                x = x.numpy()
+                y = y.numpy()
+                self.blurred_xs.append(x)
+                self.blurred_ys.append(y)
+                self.idx_lookup[ndarray_hash(x)] = idx
+            for attr in attributes:
+                with open(os.path.join(root, f"{attr}.pkl"), "wb") as f:
+                    pickle.dump(getattr(self, attr), f)
+
+    def normalize_label(self, y: float) -> float:
+        return (y - self.min_blur) / (self.max_blur - self.min_blur)
+
+    def denormalize_label(self, y: float) -> float:
+        return y * (self.max_blur - self.min_blur) + self.min_blur
+
+    def ground_truth(
+        self, x: torch.Tensor, source_y: float, target_y: float
+    ) -> np.ndarray:
+        if isinstance(x, np.ndarray):
+            x = torch.tensor(x, dtype=torch.float32)
+        idx = self.idx_lookup[ndarray_hash(x.cpu().numpy())]
+        raw_image = self._get_fmnist(idx)
+        raw_image = torch.tensor(raw_image, dtype=torch.float32)
+        raw_image = torch.unsqueeze(raw_image, dim=0)
+        if isinstance(target_y, torch.Tensor):
+            target_y = target_y.item()
+        blurred = self.blur(raw_image, target_y)
+        blurred = self.normalize(blurred)
+        return blurred.cpu().numpy()
+
+    def blur(self, x: torch.Tensor, amount: float) -> torch.Tensor:
+        radius = self.denormalize_label(amount)
+        if radius == 0:
+            return x
+        blurred = F.gaussian_blur(x, kernel_size=31, sigma=radius)
+        return blurred
+
+    def add_noise(self, x: torch.Tensor) -> torch.Tensor:
+        noisy = torch.poisson(x / self.poisson_amount) * self.poisson_amount
+        noisy = torch.clip(noisy, 0, 1)
+        return noisy
+
+    def transform_image(
+        self, image: Union[np.ndarray, torch.Tensor], factor: float
+    ) -> torch.Tensor:
+        if isinstance(image, np.ndarray):
+            image = torch.tensor(image, dtype=torch.float32)
+        if isinstance(factor, torch.Tensor):
+            factor = factor.item()
+        image = image.unsqueeze(dim=0)
+        blurred = self.blur(image, factor)
+        noisy = self.add_noise(blurred)
+        return noisy
+
+    def performance(
+        self,
+        real_images,
+        real_labels,
+        fake_images,
+        fake_labels,
+        reduction: ReductionType,
+    ) -> DataclassType:
+        ground_truths = self.ground_truths(real_images, real_labels, fake_labels)
+        ground_truths = torch.tensor(ground_truths, device=fake_images.device)
+        mae = torch.mean(torch.abs(ground_truths - fake_images), dim=[1, 2, 3])
+        frob = torch.linalg.norm(ground_truths - fake_images, dim=[1, 2, 3])
+        mse = torch.mean((ground_truths - fake_images) ** 2, dim=[1, 2, 3])
+        return_values = BlurredIMDBWikiPerformance(mae, frob, mse)
+        if reduction is ReductionType.MEAN:
+            reduce = lambda x: torch.mean(x)
+        elif reduction is ReductionType.SUM:
+            reduce = lambda x: torch.sum(x)
+        elif reduction is ReductionType.NONE:
+            reduce = lambda x: x
+        return_values = return_values.map(reduce)
+        return return_values
+
+    def __getitem__(self, index: int) -> Tuple[torch.Tensor, torch.Tensor]:
+        if self.mode is DataSplit.VAL:
+            index += self.len_train
+        x, y = self.blurred_xs[index], self.blurred_ys[index]
+        x = torch.tensor(x, dtype=torch.float32)
+        y = torch.tensor(y, dtype=torch.float32)
+        return x, y
