@@ -6,6 +6,7 @@ from typing import Callable, List, Optional, Tuple, Union
 
 import numpy as np
 import torch
+from torch._C import dtype
 from models.abstract_model import AbstractGenerator
 from PIL import Image
 from torchvision import transforms
@@ -147,6 +148,8 @@ class BlurredIMDBWiki(IMDBWiki):
         super().__init__(root, image_size=image_size)
         self.min_label = min_blur
         self.max_label = max_blur
+        self.min_blur = min_blur
+        self.max_blur = max_blur
         x_size, y_size = image_size, image_size
         self.kernel_x, self.kernel_y = np.mgrid[
             -y_size / 2 : y_size / 2, -x_size / 2 : x_size / 2
@@ -160,18 +163,27 @@ class BlurredIMDBWiki(IMDBWiki):
                     setattr(self, attr, pickle.load(f))
         except FileNotFoundError:
             print("Preprocessing dataset. This will be done once.")
-            self.blurred_xs, self.blurred_ys = [], []
+            self.blurred_xs = []
+            rng = np.random.default_rng(seed=0)  # reproducible random
+            self.blurred_ys = rng.random(size=self.total_len())  # uniform [0,1)
             self.idx_lookup = {}
             for idx in trange(self.total_len(), desc="Preprocessing"):
-                x, y = super().__getitem__(idx)
+                x = self._get_unprocessed_image(idx)
+                x = torch.unsqueeze(x, dim=0)
+                x = self.blur(x, self.blurred_ys[idx])
+                x = self.add_noise(x)
+                x = self.normalize(x)
                 x = x.numpy()
-                y = y.numpy()
                 self.blurred_xs.append(x)
-                self.blurred_ys.append(y)
                 self.idx_lookup[ndarray_hash(x)] = idx
             for attr in attributes:
                 with open(os.path.join(root, f"{attr}.pkl"), "wb") as f:
                     pickle.dump(getattr(self, attr), f)
+
+    def _get_unprocessed_image(self, index: int) -> torch.Tensor:
+        filename = self.images[index]
+        image = Image.open(filename)
+        return torch.tensor(image, dtype=torch.float32)
 
     def normalize_label(self, y: float) -> float:
         return (y - self.min_blur) / (self.max_blur - self.min_blur)
@@ -185,7 +197,7 @@ class BlurredIMDBWiki(IMDBWiki):
         if isinstance(x, np.ndarray):
             x = torch.tensor(x, dtype=torch.float32)
         idx = self.idx_lookup[ndarray_hash(x.cpu().numpy())]
-        raw_image = self._get_fmnist(idx)
+        raw_image = self._get_unprocessed_image(idx)
         raw_image = torch.tensor(raw_image, dtype=torch.float32)
         raw_image = torch.unsqueeze(raw_image, dim=0)
         if isinstance(target_y, torch.Tensor):
@@ -206,17 +218,15 @@ class BlurredIMDBWiki(IMDBWiki):
         noisy = torch.clip(noisy, 0, 1)
         return noisy
 
-    def transform_image(
-        self, image: Union[np.ndarray, torch.Tensor], factor: float
-    ) -> torch.Tensor:
-        if isinstance(image, np.ndarray):
-            image = torch.tensor(image, dtype=torch.float32)
-        if isinstance(factor, torch.Tensor):
-            factor = factor.item()
-        image = image.unsqueeze(dim=0)
-        blurred = self.blur(image, factor)
-        noisy = self.add_noise(blurred)
-        return noisy
+    def ground_truths(
+        self, xs: List[np.ndarray], source_ys: List[float], target_ys: List[float]
+    ) -> np.ndarray:
+        return np.asarray(
+            [
+                self.ground_truth(x, y_in, y_out)
+                for x, y_in, y_out in zip(xs, source_ys, target_ys)
+            ]
+        )
 
     def performance(
         self,
@@ -246,5 +256,5 @@ class BlurredIMDBWiki(IMDBWiki):
             index += self.len_train
         x, y = self.blurred_xs[index], self.blurred_ys[index]
         x = torch.tensor(x, dtype=torch.float32)
-        y = torch.tensor(y, dtype=torch.float32)
+        y = torch.tensor([y], dtype=torch.float32)
         return x, y
