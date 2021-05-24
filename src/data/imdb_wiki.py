@@ -8,9 +8,7 @@ import tempfile
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from dataclasses import dataclass
 from typing import Callable, List, Optional, Tuple, Union
-from unicodedata import lookup
 
-import h5py
 import numpy as np
 import torch
 import torchvision.transforms.functional as F
