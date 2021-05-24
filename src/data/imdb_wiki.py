@@ -17,17 +17,23 @@ from PIL import Image
 from torch.cuda.amp import autocast
 from torch.utils.data.dataloader import DataLoader
 from torchvision import transforms
-from tqdm import tqdm
-from tqdm.std import trange
+from tqdm import tqdm, trange
 from util.dataclasses import (
     DataclassExtensions,
     DataclassType,
     DataShape,
+    GeneratedExamples,
     LabelDomain,
     Metric,
 )
 from util.enums import DataSplit, ReductionType
-from util.pytorch_utils import img_to_numpy, ndarray_hash, pad_to_square, seed_worker
+from util.pytorch_utils import (
+    img_to_numpy,
+    ndarray_hash,
+    pad_to_square,
+    seed_worker,
+    stitch_images,
+)
 
 from data.abstract_classes import AbstractDataset
 
@@ -362,6 +368,44 @@ class BlurredIMDBWiki(AbstractDataset):
 
     def random_targets(self, shape: torch.Size) -> torch.Tensor:
         return torch.rand(shape)
+
+    def stitch_examples(self, real_images, real_labels, fake_images, fake_labels):
+        return [
+            GeneratedExamples(
+                self.denormalize(
+                    stitch_images(
+                        [real, fake, self.ground_truth(real, real_label, target_label)]
+                    )
+                ),
+                f"H={target_label}",
+            )
+            for real, fake, real_label, target_label in zip(
+                real_images, fake_images, real_labels, fake_labels
+            )
+        ]
+
+    def stitch_interpolations(
+        self,
+        source_image: torch.Tensor,
+        interpolations: torch.Tensor,
+        source_label: float,
+        domain: LabelDomain,
+    ) -> GeneratedExamples:
+        model_interps = stitch_images(
+            [source_image] + list(torch.unbind(interpolations))
+        )
+        domain = self.label_domain()
+        steps = interpolations.shape[0]
+        targets = torch.linspace(domain.min, domain.max, steps)
+        ground_truths = [
+            self.ground_truth(source_image, source_label, y) for y in targets
+        ]
+        stitched_truths = stitch_images([np.zeros_like(source_image)] + ground_truths)
+        stitched_results = np.concatenate([model_interps, stitched_truths], axis=0)
+        return GeneratedExamples(
+            self.denormalize(stitched_results),
+            label=f"{source_label} to [{domain.min}, {domain.max}]",
+        )
 
     def test_model(
         self,
