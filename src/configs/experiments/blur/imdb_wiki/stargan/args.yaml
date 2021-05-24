@@ -1,0 +1,17 @@
+epochs: 300
+batch_size: 90
+data_config: configs/datasets/blurry_imdb_wiki.yaml
+checkpoint_dir: /storage/checkpoints
+experiment_name: Blurred_IMDBWiki_StarGAN
+train_config: "configs/training.yaml"
+model: models.stargan.StarGAN
+model_hyperparams: configs/models/hires_stargan.yaml
+n_nodes: 1
+n_gpus: 2
+n_workers: 5
+node_rank: 0
+embed_generator: false
+embed_discriminator: false
+discriminator_lr: 0.0002
+generator_lr: 0.0002
+optimizer: adam
