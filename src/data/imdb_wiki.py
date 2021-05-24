@@ -183,17 +183,18 @@ class BlurredIMDBWiki(AbstractDataset):
         self.len_holdout = int(np.ceil(0.15 * num_images))
 
         lookup_path = os.path.join(root, "idx_lookup.json")
-        idx_lookups = {dataset_dir: {}}
+        dir_key = os.path.split(dataset_dir)[1]
+        idx_lookups = {dir_key: {}}
         try:
             with open(lookup_path, "r") as f:
                 idx_lookups = json.load(f)
-            self.idx_lookup = idx_lookups[dataset_dir][str(image_size)]
+            self.idx_lookup = idx_lookups[dir_key][str(image_size)]
         except (KeyError, FileNotFoundError):
             idx_lookup = {
                 ndarray_hash(img_to_numpy(self.denormalize(self[idx][0]))): idx
                 for idx in trange(num_images, desc="Building lookup")
             }
-            idx_lookups[dataset_dir][str(image_size)] = idx_lookup
+            idx_lookups[dir_key][str(image_size)] = idx_lookup
             with open(lookup_path, "w") as f:
                 json.dump(idx_lookups, f)
             print("Preprocessing finished.")
