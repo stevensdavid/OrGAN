@@ -343,7 +343,7 @@ class BlurredIMDBWiki(AbstractDataset):
             label_lookup[filename] = labels[idx]
             image.save(os.path.join(temp_dir, filename))
 
-        with ThreadPoolExecutor(max_workers=10) as executor:
+        with ThreadPoolExecutor(max_workers=4) as executor:
             jobs = [
                 executor.submit(process_image, idx, path)
                 for idx, path in tqdm(enumerate(all_images), desc="Queuing jobs")
@@ -406,7 +406,7 @@ class BlurredIMDBWiki(AbstractDataset):
 if __name__ == "__main__":
     dataset = BlurredIMDBWiki(
         "/storage/data/blurry_imdb_wiki",
-        image_size=256,
+        image_size=128,
         imdb_root="/storage/data/imdb",
         wiki_root="/storage/data/wiki",
     )
