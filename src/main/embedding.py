@@ -11,6 +11,7 @@ from torch import nn, optim
 from torch.cuda.amp import GradScaler, autocast
 from torch.linalg import Tensor
 from torch.utils.data import DataLoader
+from tqdm import tqdm
 from util.cyclical_encoding import to_cyclical
 from util.enums import DataSplit
 from util.object_loader import build_from_yaml
@@ -68,7 +69,7 @@ def _train_model(
     while epochs_since_best < patience:
         model.train()
         dataset.set_mode(DataSplit.TRAIN)
-        for x, y in iter(data_loader):
+        for x, y in tqdm(iter(data_loader), desc="Training batch", total=len(data_loader)):
             if cyclical:
                 y = to_cyclical(y)
             optimizer.zero_grad()
@@ -81,7 +82,7 @@ def _train_model(
         dataset.set_mode(DataSplit.VAL)
         total_loss = 0
         with torch.no_grad():
-            for x, y in iter(data_loader):
+            for x, y in tqdm(iter(data_loader), desc="Validation batch", total=len(data_loader)):
                 if cyclical:
                     y = to_cyclical(y)
                 loss = sample_loss(x, y)
