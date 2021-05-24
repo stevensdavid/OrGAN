@@ -2,7 +2,9 @@ import glob
 import json
 import os
 import random
+import shutil
 import sys
+import tempfile
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from dataclasses import dataclass
 from typing import Callable, List, Optional, Tuple, Union
@@ -19,11 +21,15 @@ from torch.utils.data.dataloader import DataLoader
 from torchvision import transforms
 from tqdm import tqdm
 from tqdm.std import trange
-from util.dataclasses import (DataclassExtensions, DataclassType, DataShape,
-                              LabelDomain, Metric)
+from util.dataclasses import (
+    DataclassExtensions,
+    DataclassType,
+    DataShape,
+    LabelDomain,
+    Metric,
+)
 from util.enums import DataSplit, ReductionType
-from util.pytorch_utils import (img_to_numpy, ndarray_hash, pad_to_square,
-                                seed_worker)
+from util.pytorch_utils import img_to_numpy, ndarray_hash, pad_to_square, seed_worker
 
 from data.abstract_classes import AbstractDataset
 
@@ -149,7 +155,7 @@ class BlurredIMDBWiki(AbstractDataset):
         root: str,
         image_size: int = 128,
         min_blur: float = 0,
-        max_blur: float = 3,
+        max_blur: float = 2,
         imdb_root: Optional[str] = None,
         wiki_root: Optional[str] = None,
     ) -> None:
@@ -162,13 +168,12 @@ class BlurredIMDBWiki(AbstractDataset):
             -y_size / 2 : y_size / 2, -x_size / 2 : x_size / 2
         ]
         self.poisson_amount = 1e-3
-        dataset_file = os.path.join(root, f"blur_{min_blur:.1f}_to_{max_blur:.1f}.hdf5")
-        if not os.path.exists(dataset_file):
-            os.makedirs(root, exist_ok=True)
-            self.preprocess(imdb_root, wiki_root, dataset_file, res=image_size)
-        self.dataset = h5py.File(dataset_file, "r+", swmr=True)
-        self.images = self.dataset["images"]
-        self.labels = self.dataset["labels"]
+        dataset_dir = os.path.join(root, f"blur_{min_blur:.1f}_to_{max_blur:.1f}")
+        if not os.path.exists(dataset_dir):
+            self.preprocess(imdb_root, wiki_root, dataset_dir, res=256)
+        self.images = glob.glob(f"{dataset_dir}/*.jpg")
+        with open(os.path.join(dataset_dir, "labels.json"), "r") as f:
+            self.labels = json.load(f)
 
         num_images = len(self.images)
         # Four splits to support training auxiliary classifiers, etc. 55-15-15-15
@@ -176,27 +181,32 @@ class BlurredIMDBWiki(AbstractDataset):
         self.len_val = int(np.floor(0.15 * num_images))
         self.len_test = int(np.floor(0.15 * num_images))
         self.len_holdout = int(np.ceil(0.15 * num_images))
-        lookup_key = f"idx_lookup_{image_size}px"
-        if lookup_key not in self.images.attrs:
+
+        lookup_path = os.path.join(root, "idx_lookup.json")
+        idx_lookups = {dataset_dir: {}}
+        try:
+            with open(lookup_path, "r") as f:
+                idx_lookups = json.load(f)
+            self.idx_lookup = idx_lookups[dataset_dir][str(image_size)]
+        except (KeyError, FileNotFoundError):
             idx_lookup = {
                 ndarray_hash(img_to_numpy(self.denormalize(self[idx][0]))): idx
                 for idx in trange(num_images, desc="Building lookup")
             }
-            self.images.attrs[lookup_key] = json.dumps(idx_lookup)
-            self.dataset.close()
-            print("Finished preprocessing, restart code!")
+            idx_lookups[dataset_dir][str(image_size)] = idx_lookup
+            with open(lookup_path, "w") as f:
+                json.dump(idx_lookups, f)
+            print("Preprocessing finished.")
             sys.exit(1)
-        else:
-            self.idx_lookup = json.loads(self.images.attrs[lookup_key])
 
-    def transform(self, x: np.ndarray) -> torch.Tensor:
-        x = torch.from_numpy(x)
-        x = torch.movedim(x, -1, 0)
+    def transform(self, x: Image) -> torch.Tensor:
+        x = F.to_tensor(x)
         x = F.resize(x, self.image_size)
         return x
 
     def _get_unprocessed_image(self, index: int) -> torch.Tensor:
-        image = self.images[index]
+        path = self.images[index]
+        image = Image.open(path)
         image = self.transform(image)
         return image
 
@@ -289,7 +299,9 @@ class BlurredIMDBWiki(AbstractDataset):
 
     def _getitem(self, index: int) -> Tuple[torch.Tensor, torch.Tensor]:
         index += self._get_idx_offset()
-        x, y = self.images[index], self.labels[index]
+        image_file = self.images[index]
+        y = self.labels[os.path.split(image_file)[1]]
+        x = Image.open(image_file)
         x = self.transform(x)
         x = self.normalize(x)
         y = self.normalize_label(y)
@@ -300,23 +312,19 @@ class BlurredIMDBWiki(AbstractDataset):
         return LabelDomain(0, 1)
 
     def preprocess(
-        self, imdb_root: str, wiki_root: str, out_filename: str, res: int
+        self, imdb_root: str, wiki_root: str, out_dir: str, res: int
     ) -> None:
         print("Preprocessing dataset. This will be done once.")
         rng = np.random.default_rng(seed=0)  # reproducible random
         all_images = glob.glob(f"{imdb_root}/**/*.jpg")
         all_images.extend(glob.glob(f"{wiki_root}/**/*.jpg"))
-
         n_images = len(all_images)
-        dataset = h5py.File(out_filename, mode="w")
-        dataset.create_dataset(
-            "labels", data=rng.random(size=n_images) * self.max_blur + self.min_blur
-        )  # uniform [min, max)
-        dataset.create_dataset(
-            "images", shape=(n_images, res, res, 3), dtype=np.float32
-        )
-        labels = dataset["labels"]
-        images = dataset["images"]
+        labels = (
+            rng.random(size=n_images) * self.max_blur + self.min_blur
+        )  # U[min, max)
+        idx_lookup = {}
+        label_lookup = {}
+        temp_dir = tempfile.mkdtemp()
 
         def process_image(idx, path):
             image = Image.open(path)
@@ -329,10 +337,13 @@ class BlurredIMDBWiki(AbstractDataset):
             x = self.blur(x, labels[idx])
             x = self.add_noise(x)
             x = torch.squeeze(x, dim=0)
-            x = img_to_numpy(x)
-            images[idx] = x
+            idx_lookup[ndarray_hash(img_to_numpy(x))] = idx
+            image = F.to_pil_image(x)
+            filename = os.path.split(path)[1]
+            label_lookup[filename] = labels[idx]
+            image.save(os.path.join(temp_dir, filename))
 
-        with ThreadPoolExecutor(max_workers=1) as executor:
+        with ThreadPoolExecutor(max_workers=10) as executor:
             jobs = [
                 executor.submit(process_image, idx, path)
                 for idx, path in tqdm(enumerate(all_images), desc="Queuing jobs")
@@ -341,7 +352,10 @@ class BlurredIMDBWiki(AbstractDataset):
                 as_completed(jobs), desc="Processing images", total=len(jobs)
             ):
                 continue
-        dataset.close()
+        with open(os.path.join(temp_dir, "labels.json"), "w") as f:
+            json.dump(label_lookup, f)
+
+        shutil.move(temp_dir, out_dir)
 
     def data_shape(self) -> DataShape:
         x, y = self[0]
@@ -392,7 +406,6 @@ class BlurredIMDBWiki(AbstractDataset):
 if __name__ == "__main__":
     dataset = BlurredIMDBWiki(
         "/storage/data/blurry_imdb_wiki",
-        max_blur=3,
         image_size=256,
         imdb_root="/storage/data/imdb",
         wiki_root="/storage/data/wiki",
@@ -401,7 +414,11 @@ if __name__ == "__main__":
 
     x, y = dataset[1]
     images = np.concatenate(
-        [dataset.ground_truth(x, y, t) for t in np.linspace(0, 1, num=10)], axis=2
+        [
+            dataset.denormalize(dataset.ground_truth(x, y, t))
+            for t in np.linspace(0, 1, num=10)
+        ],
+        axis=2,
     )
     combined = np.moveaxis(images, 0, -1)
     plt.imshow(combined)

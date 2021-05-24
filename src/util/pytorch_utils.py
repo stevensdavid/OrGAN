@@ -5,6 +5,7 @@ from typing import List
 
 import numpy as np
 import torch
+from PIL import Image
 from torch import Tensor, nn
 
 
@@ -27,7 +28,11 @@ class ConditionalInstanceNorm2d(nn.Module):
 def ndarray_hash(x: np.ndarray) -> int:
     hasher = hashlib.sha256()
     hasher.update(x.tobytes())
-    return hasher.digest()
+    return hasher.hexdigest()
+
+
+def img_to_numpy(x: torch.Tensor) -> np.ndarray:
+    return np.moveaxis(x.cpu().numpy(), 0, -1)
 
 
 def relativistic_loss(real_sources, real_average, fake_sources, sample_weights):
@@ -90,3 +95,18 @@ def load_optimizer_weights(
     opt_state = torch.load(file, map_location=map_location)
     generator_opt.load_state_dict(opt_state["g_opt"])
     discriminator_opt.load_state_dict(opt_state["d_opt"])
+
+
+def pad_to_square(pil_image: Image):
+    """Adapted from https://note.nkmk.me/en/python-pillow-add-margin-expand-canvas/"""
+    w, h = pil_image.size
+    side = max(w, h)
+    if w == h:
+        return pil_image
+    # pad with black
+    result = Image.new(pil_image.mode, (side, side), (0, 0, 0))
+    if w > h:
+        result.paste(pil_image, (0, (w - h) // 2))
+    else:
+        result.paste(pil_image, ((h - w) // 2, 0))
+    return result
