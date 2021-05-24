@@ -1,29 +1,31 @@
-from dataclasses import dataclass
+import glob
 import json
 import os
 import random
+import sys
+from concurrent.futures import ThreadPoolExecutor, as_completed
+from dataclasses import dataclass
 from typing import Callable, List, Optional, Tuple, Union
+from unicodedata import lookup
 
+import h5py
 import numpy as np
 import torch
-from torch._C import dtype
+import torchvision.transforms.functional as F
 from models.abstract_model import AbstractGenerator
 from PIL import Image
+from torch.cuda.amp import autocast
+from torch.utils.data.dataloader import DataLoader
 from torchvision import transforms
-from util.dataclasses import (
-    DataclassExtensions,
-    DataclassType,
-    DataShape,
-    LabelDomain,
-    Metric,
-)
-import torchvision.transforms.functional as F
-from util.pytorch_utils import ndarray_hash
+from tqdm import tqdm
+from tqdm.std import trange
+from util.dataclasses import (DataclassExtensions, DataclassType, DataShape,
+                              LabelDomain, Metric)
 from util.enums import DataSplit, ReductionType
+from util.pytorch_utils import (img_to_numpy, ndarray_hash, pad_to_square,
+                                seed_worker)
 
 from data.abstract_classes import AbstractDataset
-import pickle
-from tqdm import trange
 
 
 @dataclass
@@ -141,49 +143,61 @@ class IMDBWiki(AbstractDataset):
         return LabelDomain(0, 1)
 
 
-class BlurredIMDBWiki(IMDBWiki):
+class BlurredIMDBWiki(AbstractDataset):
     def __init__(
-        self, root: str, image_size: int = 128, min_blur: float = 0, max_blur: float = 5
+        self,
+        root: str,
+        image_size: int = 128,
+        min_blur: float = 0,
+        max_blur: float = 3,
+        imdb_root: Optional[str] = None,
+        wiki_root: Optional[str] = None,
     ) -> None:
-        super().__init__(root, image_size=image_size)
-        self.min_label = min_blur
-        self.max_label = max_blur
+        super().__init__()
         self.min_blur = min_blur
         self.max_blur = max_blur
+        self.image_size = image_size
         x_size, y_size = image_size, image_size
         self.kernel_x, self.kernel_y = np.mgrid[
             -y_size / 2 : y_size / 2, -x_size / 2 : x_size / 2
         ]
         self.poisson_amount = 1e-3
-        attributes = ["blurred_xs", "blurred_ys", "idx_lookup"]
+        dataset_file = os.path.join(root, f"blur_{min_blur:.1f}_to_{max_blur:.1f}.hdf5")
+        if not os.path.exists(dataset_file):
+            os.makedirs(root, exist_ok=True)
+            self.preprocess(imdb_root, wiki_root, dataset_file, res=image_size)
+        self.dataset = h5py.File(dataset_file, "r+", swmr=True)
+        self.images = self.dataset["images"]
+        self.labels = self.dataset["labels"]
 
-        try:
-            for attr in attributes:
-                with open(os.path.join(root, f"{attr}.pkl"), "rb") as f:
-                    setattr(self, attr, pickle.load(f))
-        except FileNotFoundError:
-            print("Preprocessing dataset. This will be done once.")
-            self.blurred_xs = []
-            rng = np.random.default_rng(seed=0)  # reproducible random
-            self.blurred_ys = rng.random(size=self.total_len())  # uniform [0,1)
-            self.idx_lookup = {}
-            for idx in trange(self.total_len(), desc="Preprocessing"):
-                x = self._get_unprocessed_image(idx)
-                x = torch.unsqueeze(x, dim=0)
-                x = self.blur(x, self.blurred_ys[idx])
-                x = self.add_noise(x)
-                x = self.normalize(x)
-                x = x.numpy()
-                self.blurred_xs.append(x)
-                self.idx_lookup[ndarray_hash(x)] = idx
-            for attr in attributes:
-                with open(os.path.join(root, f"{attr}.pkl"), "wb") as f:
-                    pickle.dump(getattr(self, attr), f)
+        num_images = len(self.images)
+        # Four splits to support training auxiliary classifiers, etc. 55-15-15-15
+        self.len_train = int(np.floor(0.55 * num_images))
+        self.len_val = int(np.floor(0.15 * num_images))
+        self.len_test = int(np.floor(0.15 * num_images))
+        self.len_holdout = int(np.ceil(0.15 * num_images))
+        lookup_key = f"idx_lookup_{image_size}px"
+        if lookup_key not in self.images.attrs:
+            idx_lookup = {
+                ndarray_hash(img_to_numpy(self.denormalize(self[idx][0]))): idx
+                for idx in trange(num_images, desc="Building lookup")
+            }
+            self.images.attrs[lookup_key] = json.dumps(idx_lookup)
+            self.dataset.close()
+            print("Finished preprocessing, restart code!")
+            sys.exit(1)
+        else:
+            self.idx_lookup = json.loads(self.images.attrs[lookup_key])
+
+    def transform(self, x: np.ndarray) -> torch.Tensor:
+        x = torch.from_numpy(x)
+        x = torch.movedim(x, -1, 0)
+        x = F.resize(x, self.image_size)
+        return x
 
     def _get_unprocessed_image(self, index: int) -> torch.Tensor:
-        filename = self.images[index]
-        image = Image.open(filename)
-        image = F.to_tensor(image)
+        image = self.images[index]
+        image = self.transform(image)
         return image
 
     def normalize_label(self, y: float) -> float:
@@ -195,16 +209,17 @@ class BlurredIMDBWiki(IMDBWiki):
     def ground_truth(
         self, x: torch.Tensor, source_y: float, target_y: float
     ) -> np.ndarray:
-        if isinstance(x, np.ndarray):
-            x = torch.tensor(x, dtype=torch.float32)
-        idx = self.idx_lookup[ndarray_hash(x.cpu().numpy())]
+        if isinstance(x, torch.Tensor):
+            x = img_to_numpy(self.denormalize(x))
+        idx = self.idx_lookup[ndarray_hash(x)]
         raw_image = self._get_unprocessed_image(idx)
-        raw_image = torch.tensor(raw_image, dtype=torch.float32)
         raw_image = torch.unsqueeze(raw_image, dim=0)
         if isinstance(target_y, torch.Tensor):
             target_y = target_y.item()
+        target_y = self.denormalize_label(target_y)
         blurred = self.blur(raw_image, target_y)
         blurred = self.normalize(blurred)
+        blurred = torch.squeeze(blurred, dim=0)
         return blurred.cpu().numpy()
 
     def blur(self, x: torch.Tensor, amount: float) -> torch.Tensor:
@@ -252,10 +267,142 @@ class BlurredIMDBWiki(IMDBWiki):
         return_values = return_values.map(reduce)
         return return_values
 
-    def __getitem__(self, index: int) -> Tuple[torch.Tensor, torch.Tensor]:
-        if self.mode is DataSplit.VAL:
-            index += self.len_train
-        x, y = self.blurred_xs[index], self.blurred_ys[index]
-        x = torch.tensor(x, dtype=torch.float32)
+    def _len(self) -> int:
+        if self.mode is DataSplit.TRAIN:
+            return self.len_train
+        elif self.mode is DataSplit.VAL:
+            return self.len_val
+        elif self.mode is DataSplit.TEST:
+            return self.len_test
+        elif self.mode is DataSplit.HOLDOUT:
+            return self.len_holdout
+
+    def _get_idx_offset(self) -> int:
+        if self.mode is DataSplit.TRAIN:
+            return 0
+        elif self.mode is DataSplit.VAL:
+            return self.len_train
+        elif self.mode is DataSplit.TEST:
+            return self.len_train + self.len_val
+        elif self.mode is DataSplit.HOLDOUT:
+            return self.len_train + self.len_val + self.len_test
+
+    def _getitem(self, index: int) -> Tuple[torch.Tensor, torch.Tensor]:
+        index += self._get_idx_offset()
+        x, y = self.images[index], self.labels[index]
+        x = self.transform(x)
+        x = self.normalize(x)
+        y = self.normalize_label(y)
         y = torch.tensor([y], dtype=torch.float32)
         return x, y
+
+    def label_domain(self) -> Optional[LabelDomain]:
+        return LabelDomain(0, 1)
+
+    def preprocess(
+        self, imdb_root: str, wiki_root: str, out_filename: str, res: int
+    ) -> None:
+        print("Preprocessing dataset. This will be done once.")
+        rng = np.random.default_rng(seed=0)  # reproducible random
+        all_images = glob.glob(f"{imdb_root}/**/*.jpg")
+        all_images.extend(glob.glob(f"{wiki_root}/**/*.jpg"))
+
+        n_images = len(all_images)
+        dataset = h5py.File(out_filename, mode="w")
+        dataset.create_dataset(
+            "labels", data=rng.random(size=n_images) * self.max_blur + self.min_blur
+        )  # uniform [min, max)
+        dataset.create_dataset(
+            "images", shape=(n_images, res, res, 3), dtype=np.float32
+        )
+        labels = dataset["labels"]
+        images = dataset["images"]
+
+        def process_image(idx, path):
+            image = Image.open(path)
+            if image.mode != "RGB":
+                image = image.convert("RGB")
+            image = pad_to_square(image)
+            image = image.resize((res, res))
+            x = F.to_tensor(image)
+            x = torch.unsqueeze(x, dim=0)
+            x = self.blur(x, labels[idx])
+            x = self.add_noise(x)
+            x = torch.squeeze(x, dim=0)
+            x = img_to_numpy(x)
+            images[idx] = x
+
+        with ThreadPoolExecutor(max_workers=1) as executor:
+            jobs = [
+                executor.submit(process_image, idx, path)
+                for idx, path in tqdm(enumerate(all_images), desc="Queuing jobs")
+            ]
+            for _ in tqdm(
+                as_completed(jobs), desc="Processing images", total=len(jobs)
+            ):
+                continue
+        dataset.close()
+
+    def data_shape(self) -> DataShape:
+        x, y = self[0]
+        return DataShape(y_dim=y.shape[0], n_channels=x.shape[0], x_size=x.shape[1])
+
+    def random_targets(self, shape: torch.Size) -> torch.Tensor:
+        return torch.rand(shape)
+
+    def test_model(
+        self,
+        generator: AbstractGenerator,
+        batch_size: int,
+        n_workers: int,
+        device: torch.device,
+        label_transform: Callable[[torch.Tensor], torch.Tensor],
+    ) -> DataclassType:
+        self.set_mode(DataSplit.TEST)
+        data_loader = DataLoader(
+            self,
+            batch_size,
+            shuffle=False,
+            num_workers=n_workers,
+            worker_init_fn=seed_worker,
+        )
+        n_attempts = 100
+        total_performance = None
+        for images, labels in tqdm(
+            iter(data_loader), desc="Testing batch", total=len(data_loader)
+        ):
+            for attempt in range(n_attempts):
+                targets = self.random_targets(labels.shape)
+                generator_targets = label_transform(targets.to(device))
+                with autocast():
+                    fakes = generator.transform(images.to(device), generator_targets)
+                batch_performance = self.performance(
+                    images, labels, fakes, targets, ReductionType.NONE
+                )
+                batch_performance = batch_performance.map(
+                    lambda t: t.squeeze().tolist()
+                )
+                if total_performance is None:
+                    total_performance = batch_performance
+                else:
+                    total_performance.extend(batch_performance)
+        return total_performance.map(Metric.from_list)
+
+
+if __name__ == "__main__":
+    dataset = BlurredIMDBWiki(
+        "/storage/data/blurry_imdb_wiki",
+        max_blur=3,
+        image_size=256,
+        imdb_root="/storage/data/imdb",
+        wiki_root="/storage/data/wiki",
+    )
+    import matplotlib.pyplot as plt
+
+    x, y = dataset[1]
+    images = np.concatenate(
+        [dataset.ground_truth(x, y, t) for t in np.linspace(0, 1, num=10)], axis=2
+    )
+    combined = np.moveaxis(images, 0, -1)
+    plt.imshow(combined)
+    plt.show()
