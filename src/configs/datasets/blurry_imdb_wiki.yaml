@@ -1,6 +1,6 @@
 class: data.imdb_wiki.BlurredIMDBWiki
 kwargs:
-  root: /storage/data/imdb_wiki
+  root: /storage/data/blurry_imdb_wiki
   image_size: 128
   min_blur: 0
-  max_blur: 5
+  max_blur: 2
