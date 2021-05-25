@@ -176,6 +176,7 @@ class BlurredIMDBWiki(AbstractDataset):
         if not os.path.exists(dataset_dir):
             self.preprocess(imdb_root, wiki_root, dataset_dir, res=256)
         self.images = glob.glob(f"{dataset_dir}/*.jpg")
+        self.images.sort()
         with open(os.path.join(dataset_dir, "labels.json"), "r") as f:
             self.labels = json.load(f)
 
