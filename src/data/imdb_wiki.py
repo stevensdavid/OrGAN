@@ -172,12 +172,16 @@ class BlurredIMDBWiki(AbstractDataset):
             -y_size / 2 : y_size / 2, -x_size / 2 : x_size / 2
         ]
         self.poisson_amount = 1e-3
-        dataset_dir = os.path.join(root, f"blur_{min_blur:.1f}_to_{max_blur:.1f}")
-        if not os.path.exists(dataset_dir):
-            self.preprocess(imdb_root, wiki_root, dataset_dir, res=256)
-        self.images = glob.glob(f"{dataset_dir}/*.jpg")
+        self.sharp_img_dir = os.path.join(root, "sharp")
+        if not os.path.exists(self.sharp_img_dir):
+            self.preprocess_sharp(imdb_root, wiki_root, res=256)
+        blurry_dirname = f"blur_{min_blur:.1f}_to_{max_blur:.1f}"
+        self.blurry_img_dir = os.path.join(root, blurry_dirname)
+        if not os.path.exists(self.blurry_img_dir):
+            self.preprocess_blur()
+        self.images = glob.glob(f"{self.blurry_img_dir}/*.jpg")
         self.images.sort()
-        with open(os.path.join(dataset_dir, "labels.json"), "r") as f:
+        with open(os.path.join(self.blurry_img_dir, "labels.json"), "r") as f:
             self.labels = json.load(f)
 
         num_images = len(self.images)
@@ -188,18 +192,17 @@ class BlurredIMDBWiki(AbstractDataset):
         self.len_holdout = int(np.ceil(0.15 * num_images))
 
         lookup_path = os.path.join(root, "idx_lookup.json")
-        dir_key = os.path.split(dataset_dir)[1]
-        idx_lookups = {dir_key: {}}
+        idx_lookups = {blurry_dirname: {}}
         try:
             with open(lookup_path, "r") as f:
                 idx_lookups = json.load(f)
-            self.idx_lookup = idx_lookups[dir_key][str(image_size)]
+            self.idx_lookup = idx_lookups[blurry_dirname][str(image_size)]
         except (KeyError, FileNotFoundError):
             idx_lookup = {
                 ndarray_hash(img_to_numpy(self.denormalize(self[idx][0]))): idx
                 for idx in trange(num_images, desc="Building lookup")
             }
-            idx_lookups[dir_key][str(image_size)] = idx_lookup
+            idx_lookups[blurry_dirname][str(image_size)] = idx_lookup
             with open(lookup_path, "w") as f:
                 json.dump(idx_lookups, f)
             print("Preprocessing finished.")
@@ -212,6 +215,7 @@ class BlurredIMDBWiki(AbstractDataset):
 
     def _get_unprocessed_image(self, index: int) -> torch.Tensor:
         path = self.images[index]
+        path = path.replace(self.blurry_img_dir, self.sharp_img_dir)
         image = Image.open(path)
         image = self.transform(image)
         return image
@@ -317,33 +321,56 @@ class BlurredIMDBWiki(AbstractDataset):
     def label_domain(self) -> Optional[LabelDomain]:
         return LabelDomain(0, 1)
 
-    def preprocess(
-        self, imdb_root: str, wiki_root: str, out_dir: str, res: int
-    ) -> None:
-        print("Preprocessing dataset. This will be done once.")
-        rng = np.random.default_rng(seed=0)  # reproducible random
+    def preprocess_sharp(self, imdb_root: str, wiki_root: str, res: int) -> None:
+        print("Preprocessing sharp dataset. This will be done once.")
         all_images = glob.glob(f"{imdb_root}/**/*.jpg")
         all_images.extend(glob.glob(f"{wiki_root}/**/*.jpg"))
-        n_images = len(all_images)
-        labels = (
-            rng.random(size=n_images) * self.max_blur + self.min_blur
-        )  # U[min, max)
-        idx_lookup = {}
-        label_lookup = {}
         temp_dir = tempfile.mkdtemp()
 
-        def process_image(idx, path):
+        def process_image(path):
             image = Image.open(path)
             if image.mode != "RGB":
                 image = image.convert("RGB")
             image = pad_to_square(image)
             image = image.resize((res, res))
+            filename = os.path.split(path)[1]
+            image.save(os.path.join(temp_dir, filename))
+
+        try:
+            with ThreadPoolExecutor(max_workers=4) as executor:
+                jobs = [
+                    executor.submit(process_image, path)
+                    for path in tqdm(all_images, desc="Queuing jobs")
+                ]
+                for _ in tqdm(
+                    as_completed(jobs), desc="Processing sharp images", total=len(jobs)
+                ):
+                    continue
+            shutil.move(temp_dir, self.sharp_img_dir)
+        except Exception as e:
+            os.remove(temp_dir)
+            raise e
+
+    def preprocess_blur(self) -> None:
+        print(
+            "Preprocessing blurry dataset. This will be done once for these settings."
+        )
+        rng = np.random.default_rng(seed=0)  # reproducible random
+        all_images = glob.glob(f"{self.sharp_img_dir}/*.jpg")
+        n_images = len(all_images)
+        labels = (
+            rng.random(size=n_images) * self.max_blur + self.min_blur
+        )  # U[min, max)
+        label_lookup = {}
+        temp_dir = tempfile.mkdtemp()
+
+        def process_image(idx, path):
+            image = Image.open(path)
             x = F.to_tensor(image)
             x = torch.unsqueeze(x, dim=0)
             x = self.blur(x, labels[idx])
             x = self.add_noise(x)
             x = torch.squeeze(x, dim=0)
-            idx_lookup[ndarray_hash(img_to_numpy(x))] = idx
             image = F.to_pil_image(x)
             filename = os.path.split(path)[1]
             label_lookup[filename] = labels[idx]
@@ -352,7 +379,9 @@ class BlurredIMDBWiki(AbstractDataset):
         with ThreadPoolExecutor(max_workers=4) as executor:
             jobs = [
                 executor.submit(process_image, idx, path)
-                for idx, path in tqdm(enumerate(all_images), desc="Queuing jobs")
+                for idx, path in tqdm(
+                    enumerate(all_images), desc="Queuing jobs", total=len(all_images)
+                )
             ]
             for _ in tqdm(
                 as_completed(jobs), desc="Processing images", total=len(jobs)
@@ -361,7 +390,7 @@ class BlurredIMDBWiki(AbstractDataset):
         with open(os.path.join(temp_dir, "labels.json"), "w") as f:
             json.dump(label_lookup, f)
 
-        shutil.move(temp_dir, out_dir)
+        shutil.move(temp_dir, self.blurry_img_dir)
 
     def data_shape(self) -> DataShape:
         x, y = self[0]
