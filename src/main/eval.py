@@ -32,6 +32,7 @@ def parse_args() -> Namespace:
     parser.add_argument("--sweep_name", type=str, help="Only eval this sweep.")
     parser.add_argument("--batch_size", type=int)
     parser.add_argument("--n_workers", type=int)
+    parser.add_argument("--device", choices=["cuda", "cpu"], default="cuda")
     args = parser.parse_args()
     return args
 
@@ -46,6 +47,7 @@ def get_sweeps(project_root: str) -> List[str]:
 
 
 def eval(args: Namespace):
+    device = torch.device(args.device)
     if args.mode == "metrics":
         fn = eval_sweep
     elif args.mode == "sample":
@@ -55,21 +57,21 @@ def eval(args: Namespace):
             os.path.join(args.project_root, args.sweep_name),
             args.batch_size,
             args.n_workers,
+            device,
         )
     else:
         sweeps = get_sweeps(args.project_root)
         for sweep_dir in tqdm(sweeps, desc="Evaluating sweeps"):
             tqdm.write(f"Testing sweep '{os.path.split(sweep_dir)[1]}'")
             try:
-                fn(sweep_dir, args.batch_size, args.n_workers)
+                fn(sweep_dir, args.batch_size, args.n_workers, device)
             except Exception as e:
                 tqdm.write(f"Test crashed with exception:\n{e}")
             finally:
                 torch.cuda.empty_cache()
 
 
-def eval_sweep(sweep_dir: str, batch_size: int, n_workers: int):
-    device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+def eval_sweep(sweep_dir: str, batch_size: int, n_workers: int, device: torch.device):
     args = load_yaml(os.path.join(sweep_dir, "args.yaml"))
     dataset, data_shape = build_dataset(args)
     label_transform, data_shape = get_label_transform(args, data_shape, device)
@@ -146,8 +148,7 @@ def build_dataset(args) -> Tuple[AbstractDataset, DataShape]:
     return dataset, data_shape
 
 
-def sample_sweep(sweep_dir: str, batch_size: int, n_workers: int):
-    device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+def sample_sweep(sweep_dir: str, batch_size: int, n_workers: int, device: torch.device):
     args = load_yaml(os.path.join(sweep_dir, "args.yaml"))
     dataset, data_shape = build_dataset(args)
     label_transform, data_shape = get_label_transform(args, data_shape, device)
