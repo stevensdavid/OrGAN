@@ -16,14 +16,8 @@ from torch.nn.functional import conv2d
 from torch.utils.data.dataloader import DataLoader
 from torchvision.datasets import FashionMNIST
 from tqdm import tqdm, trange
-from util.dataclasses import (
-    DataclassExtensions,
-    DataclassType,
-    DataShape,
-    GeneratedExamples,
-    LabelDomain,
-    Metric,
-)
+from util.dataclasses import (DataclassExtensions, DataclassType, DataShape,
+                              GeneratedExamples, LabelDomain, Metric)
 from util.enums import DataSplit, ReductionType
 from util.pytorch_utils import ndarray_hash, seed_worker, stitch_images
 
@@ -510,7 +504,8 @@ class BlurredFashionMNIST(BaseFashionMNIST):
         attributes = ["blurred_xs", "blurred_ys", "idx_lookup"]
         try:
             for attr in attributes:
-                with open(os.path.join(root, f"{attr}.pkl"), "rb") as f:
+                attr_path = f"{'train' if train else 'test'}_{attr}.pkl"
+                with open(os.path.join(root, attr_path), "rb") as f:
                     setattr(self, attr, pickle.load(f))
         except FileNotFoundError:
             print("Preprocessing dataset. This will be done once.")
@@ -524,7 +519,8 @@ class BlurredFashionMNIST(BaseFashionMNIST):
                 self.blurred_ys.append(y)
                 self.idx_lookup[ndarray_hash(x)] = idx
             for attr in attributes:
-                with open(os.path.join(root, f"{attr}.pkl"), "wb") as f:
+                attr_path = f"{'train' if train else 'test'}_{attr}.pkl"
+                with open(os.path.join(root, attr_path), "wb") as f:
                     pickle.dump(getattr(self, attr), f)
 
     def normalize_label(self, y: float) -> float:
