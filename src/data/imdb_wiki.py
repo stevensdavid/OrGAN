@@ -18,22 +18,11 @@ from torch.cuda.amp import autocast
 from torch.utils.data.dataloader import DataLoader
 from torchvision import transforms
 from tqdm import tqdm, trange
-from util.dataclasses import (
-    DataclassExtensions,
-    DataclassType,
-    DataShape,
-    GeneratedExamples,
-    LabelDomain,
-    Metric,
-)
+from util.dataclasses import (DataclassExtensions, DataclassType, DataShape,
+                              GeneratedExamples, LabelDomain, Metric)
 from util.enums import DataSplit, ReductionType
-from util.pytorch_utils import (
-    img_to_numpy,
-    ndarray_hash,
-    pad_to_square,
-    seed_worker,
-    stitch_images,
-)
+from util.pytorch_utils import (img_to_numpy, ndarray_hash, pad_to_square,
+                                seed_worker, stitch_images)
 
 from data.abstract_classes import AbstractDataset
 
@@ -46,7 +35,7 @@ class BlurredIMDBWikiPerformance(DataclassExtensions):
 
 
 class IMDBWiki(AbstractDataset):
-    def __init__(self, root: str, image_size=128) -> None:
+    def __init__(self, root: str, image_size=128, train: bool=True) -> None:
         super().__init__()
         self.root = root
         transformations = [
@@ -74,6 +63,10 @@ class IMDBWiki(AbstractDataset):
         self.len_holdout = int(np.ceil(0.15 * num_images))
         self.min_label = 0  # actual min is 1, but it's reasonable to include 0 years
         self.max_label = max(self.labels)
+        if train:
+            self.mode = DataSplit.TRAIN
+        else:
+            self.mode = DataSplit.TEST
 
     def normalize_label(self, y: int) -> float:
         return (y - self.min_label) / (self.max_label - self.min_label)
@@ -162,6 +155,7 @@ class BlurredIMDBWiki(AbstractDataset):
         max_blur: float = 2,
         imdb_root: Optional[str] = None,
         wiki_root: Optional[str] = None,
+        train: bool=True,
     ) -> None:
         super().__init__()
         self.min_blur = min_blur
@@ -207,6 +201,11 @@ class BlurredIMDBWiki(AbstractDataset):
                 json.dump(idx_lookups, f)
             print("Preprocessing finished.")
             sys.exit(1)
+
+        if train:
+            self.mode = DataSplit.TRAIN
+        else:
+            self.mode = DataSplit.TEST
 
     def transform(self, x: Image) -> torch.Tensor:
         x = F.to_tensor(x)
