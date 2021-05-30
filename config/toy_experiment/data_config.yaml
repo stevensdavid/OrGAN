@@ -1,6 +1,0 @@
-class_path: data.circular_gaussians.CircularGaussians
-kwargs:
-  n_gaussians: 24
-  n_holdout: 8
-  points_per_gaussian: 100
-  coordinate_type: cartesian

@@ -7,11 +7,10 @@ from argparse import ArgumentParser
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from uuid import UUID
 
-import numpy as np
 import pandas as pd
 from PIL import Image
-from scripts.util import pad_to_square
 from tqdm import tqdm
+from util.pytorch_utils import pad_to_square
 
 # Setup deterministic identifiers
 rd = random.Random()

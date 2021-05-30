@@ -1,21 +1,22 @@
-from argparse import ArgumentParser
-import logging
-from PIL import Image
-from aiohttp import ClientSession
-import os
-from io import BytesIO
-import tqdm.asyncio
-import tqdm
-import glob
-from os.path import join
-import pandas as pd
-from math import isfinite
-from tempfile import mkdtemp
-import json
-import shutil
 import asyncio
+import glob
+import json
+import logging
+import os
+import shutil
 import sys
-from util import pad_to_square
+from argparse import ArgumentParser
+from io import BytesIO
+from math import isfinite
+from os.path import join
+from tempfile import mkdtemp
+
+import pandas as pd
+import tqdm
+import tqdm.asyncio
+from aiohttp import ClientSession
+from PIL import Image
+from util.pytorch_utils import pad_to_square
 
 logger = logging.getLogger("UnsplashDownloader")
 logging.basicConfig(stream=sys.stdout, level=logging.INFO)
