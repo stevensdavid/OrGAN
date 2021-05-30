@@ -1,7 +1,0 @@
-checkpoint_frequency: 1000
-checkpoint_frequency_metric: iterations
-log_frequency: 10
-log_frequency_metric: iterations
-skip_validation: true
-sample_frequency: 1000
-multi_gpu_type: ddp

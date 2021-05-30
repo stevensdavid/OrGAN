@@ -1,4 +1,0 @@
-g_conv_dim: 128
-g_num_bottleneck: 6
-d_conv_dim: 128
-d_num_scales: 3
