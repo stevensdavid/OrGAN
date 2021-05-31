@@ -1,4 +1,4 @@
-name: RaLSGAN
+name: OrGAN
 project: blur_imdb_wiki
 command:
   - ${env}
@@ -6,7 +6,7 @@ command:
   - -m
   - ${program}
   - --args_file
-  - configs/experiments/blur/imdb_wiki/ralsgan/args.yaml
+  - configs/experiments/blur/imdb_wiki/organ/args.yaml
   - --log_hyperparams
 early_terminate:
   min_iter: 3

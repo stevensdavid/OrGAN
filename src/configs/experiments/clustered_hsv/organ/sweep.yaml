@@ -1,12 +1,12 @@
-name: RaLSGAN
-project: blur
+name: Best
+project: clustered_hsv
 command:
   - ${env}
   - python
   - -m
   - ${program}
   - --args_file
-  - configs/experiments/blur/ralsgan/args.yaml
+  - configs/experiments/clustered_hsv/organ/args.yaml
   - --log_hyperparams
 early_terminate:
   min_iter: 10
@@ -14,7 +14,7 @@ early_terminate:
 method: bayes
 metric:
   goal: minimize
-  name: mae
+  name: rgb_l1
 parameters:
   l_rec:
     distribution: uniform

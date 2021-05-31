@@ -1,7 +1,7 @@
 epochs: 100
-batch_size: 450
+batch_size: 200
 data_config: configs/datasets/non_cyclical_hsv.yaml
-checkpoint_dir: /storage/checkpoints
+checkpoint_dir: checkpoints
 experiment_name: Continuous_HSV_Best
 train_config: "configs/training.yaml"
 model: models.ccgan.CCStarGAN
@@ -12,7 +12,7 @@ n_workers: 5
 node_rank: 0
 embed_generator: true
 embed_discriminator: true
-ccgan_embedding_file: /storage/embeddings/continuous_hsv/embedding.pt
+ccgan_embedding_file: embeddings/continuous_hsv/embedding.pt
 ccgan_embedding_dim: 128
 discriminator_lr: 0.0002
 generator_lr: 0.0002

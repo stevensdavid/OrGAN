@@ -1,12 +1,12 @@
-name: Best
-project: continuous_hsv
+name: OrGAN
+project: rotation
 command:
   - ${env}
   - python
   - -m
   - ${program}
   - --args_file
-  - configs/experiments/continuous_hsv/best/args.yaml
+  - configs/experiments/rotation/organ/args.yaml
   - --log_hyperparams
 early_terminate:
   min_iter: 10
@@ -14,7 +14,7 @@ early_terminate:
 method: bayes
 metric:
   goal: minimize
-  name: rgb_l1
+  name: mae
 parameters:
   l_rec:
     distribution: uniform

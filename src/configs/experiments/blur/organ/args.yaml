@@ -1,8 +1,8 @@
 epochs: 100
-batch_size: 450
-data_config: configs/datasets/rotation.yaml
+batch_size: 200
+data_config: configs/datasets/blur.yaml
 checkpoint_dir: /storage/checkpoints
-experiment_name: Rotaiton_RaLSGAN
+experiment_name: Blur_RaLSGAN
 train_config: "configs/training.yaml"
 model: models.ccgan.CCStarGAN
 model_hyperparams: configs/models/stargan.yaml
@@ -12,7 +12,7 @@ n_workers: 5
 node_rank: 0
 embed_generator: true
 embed_discriminator: true
-ccgan_embedding_file: /storage/embeddings/rotation/embedding.pt
+ccgan_embedding_file: /storage/embeddings/blur/embedding.pt
 ccgan_embedding_dim: 128
 discriminator_lr: 0.0002
 generator_lr: 0.0002

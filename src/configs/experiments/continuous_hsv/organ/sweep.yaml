@@ -1,12 +1,12 @@
-name: RaLSGAN
-project: rotation
+name: Best
+project: continuous_hsv
 command:
   - ${env}
   - python
   - -m
   - ${program}
   - --args_file
-  - configs/experiments/rotation/ralsgan/args.yaml
+  - configs/experiments/continuous_hsv/organ/args.yaml
   - --log_hyperparams
 early_terminate:
   min_iter: 10
@@ -14,7 +14,7 @@ early_terminate:
 method: bayes
 metric:
   goal: minimize
-  name: mae
+  name: rgb_l1
 parameters:
   l_rec:
     distribution: uniform
