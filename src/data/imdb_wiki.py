@@ -18,11 +18,23 @@ from torch.cuda.amp import autocast
 from torch.utils.data.dataloader import DataLoader
 from torchvision import transforms
 from tqdm import tqdm, trange
-from util.dataclasses import (DataclassExtensions, DataclassType, DataShape,
-                              GeneratedExamples, LabelDomain, Metric)
+from util.dataclasses import (
+    DataclassExtensions,
+    DataclassType,
+    DataShape,
+    GeneratedExamples,
+    LabelDomain,
+    Metric,
+)
 from util.enums import DataSplit, ReductionType
-from util.pytorch_utils import (img_to_numpy, ndarray_hash, pad_to_square,
-                                seed_worker, stitch_images)
+from util.pytorch_utils import (
+    img_to_numpy,
+    ndarray_hash,
+    pad_to_square,
+    pairwise_deterministic_shuffle,
+    seed_worker,
+    stitch_images,
+)
 
 from data.abstract_classes import AbstractDataset
 
@@ -35,7 +47,7 @@ class BlurredIMDBWikiPerformance(DataclassExtensions):
 
 
 class IMDBWiki(AbstractDataset):
-    def __init__(self, root: str, image_size=128, train: bool=True) -> None:
+    def __init__(self, root: str, image_size=128, train: bool = True) -> None:
         super().__init__()
         self.root = root
         transformations = [
@@ -46,14 +58,8 @@ class IMDBWiki(AbstractDataset):
             [transforms.RandomHorizontalFlip()] + transformations
         )
         self.val_transform = transforms.Compose(transformations)
-        self.images, self.labels = self._load_dataset()
-        # Shuffle deterministically
-        old_random_state = random.getstate()
-        random.seed(0)
-        temp = list(zip(self.images, self.labels))
-        random.shuffle(temp)
-        self.images, self.labels = zip(*temp)
-        random.setstate(old_random_state)
+        images, labels = self._load_dataset()
+        self.images, self.labels = pairwise_deterministic_shuffle(images, labels)
 
         num_images = len(self.labels)
         # Four splits to support training auxiliary classifiers, etc. 55-15-15-15
@@ -155,7 +161,7 @@ class BlurredIMDBWiki(AbstractDataset):
         max_blur: float = 2,
         imdb_root: Optional[str] = None,
         wiki_root: Optional[str] = None,
-        train: bool=True,
+        train: bool = True,
     ) -> None:
         super().__init__()
         self.min_blur = min_blur

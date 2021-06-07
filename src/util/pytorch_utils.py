@@ -1,7 +1,7 @@
 import hashlib
 import os
 import random
-from typing import List
+from typing import List, Tuple
 
 import numpy as np
 import torch
@@ -110,3 +110,13 @@ def pad_to_square(pil_image: Image):
     else:
         result.paste(pil_image, ((h - w) // 2, 0))
     return result
+
+
+def pairwise_deterministic_shuffle(*args) -> Tuple:
+    # Shuffle deterministically
+    old_random_state = random.getstate()
+    random.seed(0)
+    temp = list(zip(args))
+    random.shuffle(temp)
+    random.setstate(old_random_state)
+    return tuple(zip(*temp))
