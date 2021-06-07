@@ -5,9 +5,9 @@ from typing import Callable, List, Tuple
 import numpy as np
 import requests
 import torch
-from torch import nn
 from models.abstract_model import AbstractGenerator
-from util.dataclasses import DataShape, DataclassType, LabelDomain
+from torch import nn
+from util.dataclasses import DataclassType, DataShape, LabelDomain
 from util.enums import DataSplit
 
 from data.abstract_classes import AbstractDataset
@@ -15,7 +15,11 @@ from data.abstract_classes import AbstractDataset
 
 class BinaryQuickDraw(AbstractDataset):
     def __init__(
-        self, root: str, classes: List[str] = ["cat", "dog"], normalize: bool = True
+        self,
+        root: str,
+        classes: List[str] = ["cat", "dog"],
+        normalize: bool = True,
+        train: bool = True,
     ) -> None:
         super().__init__()
         self.log = logging.getLogger("QuickDraw")
@@ -41,6 +45,10 @@ class BinaryQuickDraw(AbstractDataset):
         self.len_val = int(np.floor(0.15 * n_images))
         self.len_test = int(np.ceil(0.15 * n_images))
         self.pad = nn.ZeroPad2d(2)
+        if train:
+            self.mode = DataSplit.TRAIN
+        else:
+            self.mode = DataSplit.TEST
 
     def _load_images(self) -> np.ndarray:
         return np.load(self._get_image_path())
