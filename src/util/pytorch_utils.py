@@ -119,4 +119,4 @@ def pairwise_deterministic_shuffle(*args) -> Tuple:
     temp = list(zip(args))
     random.shuffle(temp)
     random.setstate(old_random_state)
-    return tuple(zip(*temp))
+    return next(zip(*temp))
