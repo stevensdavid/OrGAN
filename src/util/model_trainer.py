@@ -1,4 +1,4 @@
-from logging import getLogger
+from datetime import datetime
 from typing import Callable
 
 import numpy as np
@@ -24,7 +24,6 @@ def train_model(
     target_input_getter: Callable[[Tensor, Tensor], Tensor],
     cyclical: bool = False,
 ) -> nn.Module:
-    logger = getLogger("ModelTrainer")
     module.to(device)
     model = nn.DataParallel(module)
     best_loss = np.inf
@@ -75,8 +74,9 @@ def train_model(
         else:
             epochs_since_best += 1
 
-        logger.info(
-            f"Epoch {current_epoch} Loss: {mean_loss:.3e} Patience: {epochs_since_best}/{patience}"
+        tqdm.write(
+            f"[{datetime.now().strftime('%Y-%m-%d %H:%M:%S')}] Epoch {current_epoch} "
+            + f"Loss: {mean_loss:.3e} Patience: {epochs_since_best}/{patience}"
         )
         current_epoch += 1
     module.load_state_dict(best_weights)
