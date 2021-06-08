@@ -5,7 +5,7 @@ import numpy as np
 import torch
 from data.abstract_classes import AbstractDataset
 from torch import Tensor, nn, optim
-from torch.cuda.amp import autocast, grad_scaler
+from torch.cuda.amp import GradScaler, autocast
 from torch.utils.data.dataloader import DataLoader
 from tqdm import tqdm
 
@@ -32,7 +32,7 @@ def train_model(
     epochs_since_best = 0
     current_epoch = 1
     optimizer = optim.Adam(model.parameters())
-    scaler = grad_scaler()
+    scaler = GradScaler()
     criterion = nn.MSELoss()
 
     def sample_loss(x, y) -> Tensor:
