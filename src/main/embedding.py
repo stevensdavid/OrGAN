@@ -7,8 +7,9 @@ from data.abstract_classes import AbstractDataset
 from models.ccgan import ConvLabelClassifier, LabelEmbedding
 from torch import nn
 from torch.utils.data import DataLoader
+from util.model_trainer import train_model
 from util.object_loader import build_from_yaml
-from util.pytorch_utils import seed_worker, set_seeds, train_model
+from util.pytorch_utils import seed_worker, set_seeds
 
 LOG = getLogger("EmbeddingTrainer")
 
