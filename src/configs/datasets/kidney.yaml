@@ -1,0 +1,5 @@
+class: data.kidney_health.MachineAnnotated
+kwargs:
+  root: /storage/data/kidneys
+  device: cuda
+  image_size: 256
