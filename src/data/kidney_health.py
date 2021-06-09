@@ -1,27 +1,41 @@
 import json
 import os
 import pickle
+import random
 from abc import ABC, abstractmethod
-from argparse import ArgumentParser
+from argparse import ArgumentParser, Namespace
+from collections import deque
+from dataclasses import dataclass
+from datetime import datetime
 from glob import glob
 from typing import Callable, Dict, List, Optional, Tuple, Union
 
+import matplotlib.pyplot as plt
+import numpy as np
 import torch
 import torchvision.transforms.functional as F
 from models.abstract_model import AbstractGenerator
 from PIL import Image
-from torch import nn
-from torch.cuda.amp import autocast
+from torch import Tensor, nn, optim
+from torch.cuda.amp import GradScaler, autocast
 from torch.utils.data.dataloader import DataLoader
 from torchvision import transforms
 from torchvision.models import resnet34
 from tqdm import tqdm
-from util.dataclasses import DataclassType, DataShape, LabelDomain
-from util.enums import DataSplit
+from util.dataclasses import (
+    DataclassExtensions,
+    DataclassType,
+    DataShape,
+    LabelDomain,
+    Metric,
+)
+from util.enums import DataSplit, ReductionType
 from util.model_trainer import train_model
 from util.pytorch_utils import pairwise_deterministic_shuffle, seed_worker, set_seeds
 
 from data.abstract_classes import AbstractDataset
+
+N_CLASSES = 4
 
 
 def annotator_path(root: str) -> str:
@@ -33,39 +47,65 @@ def annotation_path(root: str) -> str:
 
 
 class MachineAnnotator(nn.Module):
-    def __init__(self, pretrained_base=False) -> None:
+    def __init__(self, mode: str = "regression", pretrained_base=False) -> None:
         super().__init__()
         self.resnet = resnet34(pretrained=pretrained_base)
         old_fc = self.resnet.fc
-        self.resnet.fc = nn.Linear(old_fc.in_features, 1)
-        self.output_activation = nn.Sigmoid()
+        self.mode = mode
+        if mode == "regression":
+            self.resnet.fc = nn.Linear(old_fc.in_features, 1)
+            self.output_activation = nn.Sigmoid()
+        elif mode == "classification":
+            self.resnet.fc = nn.Linear(old_fc.in_features, N_CLASSES)
+            self.output_activation = lambda x: x
 
     @autocast()
     def forward(self, x: torch.Tensor) -> torch.Tensor:
         return self.output_activation(self.resnet(x))
 
     @staticmethod
-    def from_weights(path: str):
-        model = MachineAnnotator(pretrained_base=False)
+    def from_weights(path: str, mode: str = "regression"):
+        model = MachineAnnotator(pretrained_base=False, mode=mode)
         model.load_state_dict(torch.load(path))
         model.eval()
         return model
 
 
 class BaseKidneyHealth(AbstractDataset, ABC):
-    def __init__(self, root: str, image_size=512, train: bool = True) -> None:
+    def __init__(
+        self,
+        root: str,
+        image_size=512,
+        train: bool = True,
+        label_type: str = "regression",
+    ) -> None:
         super().__init__()
         self.root = root
+        self.label_type = label_type
         self.image_size = image_size
         self.data = self.load_data()
         self.min_label = 0
-        self.max_label = 4
+        self.max_label = 3
         transformations = [
             transforms.Resize(image_size),
             transforms.ToTensor(),
+            transforms.Normalize(
+                mean=[0.73835371, 0.54834542, 0.71608568],
+                std=[0.14926942, 0.1907891, 0.12789522],
+            ),
         ]
         self.train_transform = transforms.Compose(
-            [transforms.RandomHorizontalFlip()] + transformations
+            [
+                transforms.RandomRotation(degrees=5),
+                transforms.ColorJitter(
+                    brightness=0.2, contrast=0.2, saturation=0.2, hue=0.1
+                ),
+                transforms.RandomResizedCrop(224, scale=[0.4, 1.0]),
+                transforms.GaussianBlur(5, sigma=(0.1, 2.0)),
+                transforms.RandomVerticalFlip(),
+                transforms.RandomHorizontalFlip(),
+            ]
+            + transformations
         )
         self.val_transform = transforms.Compose(transformations)
 
@@ -94,9 +134,13 @@ class BaseKidneyHealth(AbstractDataset, ABC):
             image = self.train_transform(image)
         else:
             image = self.val_transform(image)
-        label = torch.tensor([label], dtype=torch.float32)
-        image = self.normalize(image)
-        label = self.normalize_label(label)
+        if self.label_type == "regression":
+            label = torch.tensor([label], dtype=torch.float32)
+            label = self.normalize_label(label)
+        else:
+            label = torch.tensor(label)
+            label = nn.functional.one_hot(label, num_classes=N_CLASSES)
+        # image = self.normalize(image)
         return image, label
 
     def _len(self) -> int:
@@ -114,24 +158,32 @@ class BaseKidneyHealth(AbstractDataset, ABC):
 
 
 class ManuallyAnnotated(BaseKidneyHealth):
-    def __init__(self, root: str, image_size=512, train: bool = True) -> None:
-        super().__init__(root=root, image_size=image_size, train=train)
+    def __init__(
+        self,
+        root: str,
+        image_size=256,
+        train: bool = True,
+        label_type: str = "regression",
+    ) -> None:
+        super().__init__(
+            root=root, image_size=image_size, train=train, label_type=label_type
+        )
 
     def load_data(self) -> Tuple[List[str], List[float]]:
         label_to_float = {
-            "Excluded": 0,
-            "Normal": 1,
-            "Mild": 2,
-            "Moderate": 3,
-            "Severe": 4,
+            "Normal": 0,
+            "Mild": 1,
+            "Moderate": 2,
+            "Severe": 3,
+            # "Excluded": 4,
         }
         with open(os.path.join(self.root, "meta.pkl"), "rb") as f:
             meta = pickle.load(f)
 
-        slides = sorted(list({x["slide"] for x in meta}))
-        test_slides = slides[:10]
-        val_slides = slides[10:20]
-        train_slides = slides[20:]
+        slides = list(sorted({x["slide"] for x in meta}))
+        test_slides = slides[:12]
+        val_slides = slides[12:24]
+        train_slides = slides[24:]
 
         splits = {
             DataSplit.TRAIN: {"images": [], "labels": []},
@@ -139,7 +191,7 @@ class ManuallyAnnotated(BaseKidneyHealth):
             DataSplit.VAL: {"images": [], "labels": []},
         }
         for x in meta:
-            if x["label"] == "Invalid":
+            if x["label"] not in label_to_float.keys():
                 continue
             slide = x["slide"]
             split = (
@@ -151,11 +203,11 @@ class ManuallyAnnotated(BaseKidneyHealth):
             )
             splits[split]["images"].append(f"annotated/{x['image']}")
             splits[split]["labels"].append(label_to_float[x["label"]])
-        for key, data in splits.items():
-            shuffled_images, shuffled_labels = pairwise_deterministic_shuffle(
-                data["images"], data["labels"]
-            )
-            splits[key] = {"images": shuffled_images, "labels": shuffled_labels}
+        # for key, data in splits.items():
+        #     shuffled_images, shuffled_labels = pairwise_deterministic_shuffle(
+        #         data["images"], data["labels"]
+        #     )
+        #     splits[key] = {"images": shuffled_images, "labels": shuffled_labels}
         return splits
 
     def performance(self, real_images, real_labels, fake_images, fake_labels) -> dict:
@@ -175,34 +227,85 @@ class ManuallyAnnotated(BaseKidneyHealth):
         raise NotImplementedError()
 
 
+@dataclass
+class KidneyPerformance(DataclassExtensions):
+    mae: float
+    mse: float
+
+
 class MachineAnnotated(BaseKidneyHealth):
     def __init__(
-        self, root: str, device: torch.device, image_size=512, train: bool = True
+        self,
+        root: str,
+        device: torch.device,
+        image_size=256,
+        train: bool = True,
+        **kwargs,
     ) -> None:
         annotator_weights = annotator_path(root)
         if os.path.exists(annotator_weights):
-            self.annotator = MachineAnnotator.from_weights(annotator_weights)
-            self.annotator.to(device)
+            self.classifier = MachineAnnotator.from_weights(annotator_weights)
+            self.classifier.to(device)
         else:
             raise ValueError(
                 "Annotator not found. Please run this module with python -m "
                 + "data.kidney_health to train one."
             )
         super().__init__(root=root, image_size=image_size, train=train)
+        self.test_set = ManuallyAnnotated(root, image_size, train=False)
+        self.test_set.set_mode(DataSplit.TEST)
 
     def load_data(self) -> Dict[str, List[Union[float, str]]]:
         metadata_path = os.path.join(self.root, "annotations.json")
         with open(metadata_path, "r") as f:
             metadata = json.load(f)
+        all_images = [x["image"] for x in metadata]
+        all_labels = [x["label"] for x in metadata]
+        all_images, all_labels = pairwise_deterministic_shuffle(all_images, all_labels)
+        n_images = len(all_labels)
+        train_val_split = 0.8
+        split_idx = round(train_val_split * n_images)
+        train_images, train_labels = all_images[:split_idx], all_labels[:split_idx]
+        val_images, val_labels = all_images[split_idx:], all_labels[split_idx:]
+
+        # Test split is taken from manual annotations
         data = {
-            DataSplit.TRAIN: metadata["train"],
-            DataSplit.TEST: metadata["test"],
-            DataSplit.VAL: metadata["val"],
+            DataSplit.TRAIN: {"images": train_images, "labels": train_labels},
+            DataSplit.VAL: {"images": val_images, "labels": val_labels},
         }
         return data
 
-    def performance(self, real_images, real_labels, fake_images, fake_labels) -> dict:
-        return super().performance(real_images, real_labels, fake_images, fake_labels)
+    def _len(self) -> int:
+        if self.mode is DataSplit.TEST:
+            return self.test_set._len()
+        return super()._len()
+
+    def _getitem(self, index):
+        if self.mode is DataSplit.TEST:
+            return self.test_set._getitem(index)
+        return super()._getitem(index)
+
+    def performance(
+        self,
+        real_images,
+        real_labels,
+        fake_images,
+        fake_labels,
+        reduction: ReductionType,
+    ) -> dict:
+        with torch.no_grad(), autocast():
+            preds = self.classifier(fake_images)
+        abs_error = torch.abs(fake_labels - preds)
+        squared_error = (fake_labels - preds) ** 2
+        return_values = KidneyPerformance(abs_error, squared_error)
+        if reduction is ReductionType.MEAN:
+            reduce = lambda x: torch.mean(x)
+        elif reduction is ReductionType.SUM:
+            reduce = lambda x: torch.sum(x)
+        elif reduction is ReductionType.NONE:
+            reduce = lambda x: x
+        return_values = return_values.map(reduce)
+        return return_values
 
     def test_model(
         self,
@@ -212,14 +315,39 @@ class MachineAnnotated(BaseKidneyHealth):
         device: torch.device,
         label_transform: Callable[[torch.Tensor], torch.Tensor],
     ) -> DataclassType:
-        return super().test_model(
-            generator, batch_size, n_workers, device, label_transform
+        data_loader = DataLoader(
+            self.test_set,
+            batch_size,
+            shuffle=False,
+            num_workers=n_workers,
+            worker_init_fn=seed_worker,
         )
+        n_attempts = 100
+        total_performance = None
+        for images, labels in tqdm(
+            iter(data_loader), desc="Testing batch", total=len(data_loader)
+        ):
+            for attempt in range(n_attempts):
+                targets = self.random_targets(labels.shape)
+                generator_targets = label_transform(targets.to(device))
+                with autocast():
+                    fakes = generator.transform(images.to(device), generator_targets)
+                batch_performance = self.performance(
+                    images, labels, fakes, targets, ReductionType.NONE
+                )
+                batch_performance = batch_performance.map(
+                    lambda t: t.squeeze().tolist()
+                )
+                if total_performance is None:
+                    total_performance = batch_performance
+                else:
+                    total_performance.extend(batch_performance)
+        return total_performance.map(Metric.from_list)
 
 
 class KidneyData(AbstractDataset):
     def __init__(
-        self, root: str, device: torch.device, image_size: int = 512, train: bool = True
+        self, root: str, device: torch.device, image_size: int = 256, train: bool = True
     ) -> None:
         super().__init__()
         self.test_set = ManuallyAnnotated(root, image_size, train=False)
@@ -265,57 +393,219 @@ class KidneyData(AbstractDataset):
 
 def train_annotator():
     set_seeds(0)
+    mode = "regression"
     parser = ArgumentParser()
-    parser.add_argument("--res", type=int, default=512)
+    parser.add_argument("--res", type=int, default=256)
     parser.add_argument("--root", type=str, required=True)
     parser.add_argument("--batch_size", type=int, required=True)
     parser.add_argument("--n_workers", type=int, required=True)
     args = parser.parse_args()
     checkpoint_path = annotator_path(args.root)
+    device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+    manual_annotations = ManuallyAnnotated(
+        args.root, args.res, train=True, label_type=mode
+    )
+    loader = DataLoader(
+        manual_annotations,
+        batch_size=args.batch_size,
+        shuffle=True,
+        worker_init_fn=seed_worker,
+        num_workers=args.n_workers,
+    )
     if os.path.exists(checkpoint_path):
-        annotator = MachineAnnotator.from_weights(checkpoint_path)
+        annotator = MachineAnnotator.from_weights(checkpoint_path, mode=mode)
+        annotator.to(device)
+        test_resnet(manual_annotations, loader, annotator, device)
     else:
-        manual_annotations = ManuallyAnnotated(args.root, args.res, train=True)
-        loader = DataLoader(
-            manual_annotations,
-            batch_size=args.batch_size,
-            shuffle=True,
-            worker_init_fn=seed_worker,
-            num_workers=args.n_workers,
-        )
-        device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-        annotator = MachineAnnotator(pretrained_base=True)
+        annotator = MachineAnnotator(pretrained_base=True, mode=mode)
         annotator = train_model(
             annotator,
             manual_annotations,
             loader,
-            patience=5,
+            patience=10,
             device=device,
-            target_fn=lambda y: y,
-            model_input_getter=lambda x, y: x,
-            target_input_getter=lambda x, y: y,
-            cyclical=False,
+            mode=mode,
         )
+        test_resnet(manual_annotations, loader, annotator, device)
         annotator.to("cpu")
         torch.save(annotator.state_dict(), checkpoint_path)
     annotation_file = annotation_path(args.root)
     if not os.path.exists(annotation_file):
-        print("Creating annotations")
-        annotator.to(device)
-        annotations = []
-        unannotated = glob(f"{args.root}/unannotated/*.png")
-        for image_path in tqdm(unannotated, desc="Annotating"):
+        create_annotations(
+            annotator, args, device, mode, manual_annotations, annotation_file
+        )
+    with open(annotation_file, "r") as f:
+        annotations = json.load(f)
+    plot_annotations(annotations, mode)
+
+
+def create_annotations(
+    annotator: MachineAnnotator,
+    args: Namespace,
+    device: torch.device,
+    mode: str,
+    dataset: BaseKidneyHealth,
+    target_path: str,
+):
+    print("Creating annotations")
+    annotator.to(device)
+    annotations = deque()
+    unannotated = glob(f"{args.root}/unannotated/*.png")
+    n = args.batch_size
+    batches = [
+        unannotated[i * n : (i + 1) * n] for i in range((len(unannotated) + n - 1) // n)
+    ]
+    for image_batch in tqdm(batches, desc="Annotating"):
+        images = []
+        for image_path in image_batch:
             image = Image.open(image_path)
-            image = F.to_tensor(image)
-            with autocast(), torch.no_grad():
-                prediction = annotator(image).item()
-            label = manual_annotations.denormalize_label(prediction)
+            image = dataset.val_transform(image)
+            image = dataset.normalize(image)
+            images.append(image)
+        images = torch.stack(images)
+        images = images.to(device)
+        with autocast(), torch.no_grad():
+            predictions = annotator(images)
+        if mode == "regression":
+            labels = dataset.denormalize_label(predictions)
+        else:
+            labels = torch.argmax(predictions, dim=1)
+        predictions = predictions.to("cpu").numpy()
+        for image_path, label in zip(image_batch, labels):
             filename = os.path.split(image_path)[1]
-            annotations.append({"image": f"unannotated/{filename}", "label": label})
+            annotations.append(
+                {"image": f"unannotated/{filename}", "label": label.item()}
+            )
+    with open(target_path, "w") as f:
+        json.dump(list(annotations), f)
+
+
+def plot_annotations(annotations, mode):
+    all_labels = np.asarray([x["label"] for x in annotations])
+    plt.figure()
+    if mode == "classification":
+        freq = [sum(all_labels == i) for i in range(N_CLASSES)]
+        plt.bar(range(N_CLASSES), freq)
+    else:
+        plt.hist(all_labels)
+    plt.title("Annotation distribution")
+    plt.savefig("annotations.png")
+
+
+def train_model(
+    module: nn.Module,
+    dataset: AbstractDataset,
+    data_loader: DataLoader,
+    patience: int,
+    device: torch.device,
+    mode: str = "regression",
+) -> nn.Module:
+    module.to(device)
+    model = nn.DataParallel(module)
+    best_loss = np.inf
+    best_weights = None
+    epochs_since_best = 0
+    current_epoch = 1
+    optimizer = optim.Adam(model.parameters())
+    scheduler = optim.lr_scheduler.ReduceLROnPlateau(
+        optimizer, "min", patience=patience // 3
+    )
+    scaler = GradScaler()
+
+    def sample_loss(x, y) -> Tensor:
+        x, y = x.to(device), y.to(device)
+        if mode == "classification":
+            y = torch.argmax(y, dim=1)
+            criterion = nn.functional.cross_entropy
+        else:
+            criterion = nn.functional.mse_loss
+        with autocast():
+            output = model(x)
+            return criterion(output, y)
+
+    while epochs_since_best < patience:
+        model.train()
+        dataset.set_mode(DataSplit.TRAIN)
+        for x, y in tqdm(
+            iter(data_loader), desc="Training batch", total=len(data_loader)
+        ):
+            optimizer.zero_grad()
+            loss = sample_loss(x, y)
+            scaler.scale(loss).backward()
+            scaler.step(optimizer)
+            scaler.update()
+
+        model.eval()
+        dataset.set_mode(DataSplit.VAL)
+        total_loss = 0
+        with torch.no_grad():
+            for x, y in tqdm(
+                iter(data_loader), desc="Validation batch", total=len(data_loader)
+            ):
+                loss = sample_loss(x, y)
+                total_loss += loss
+        mean_loss = total_loss / len(data_loader)
+        scheduler.step(mean_loss)
+        if mean_loss < best_loss:
+            epochs_since_best = 0
+            best_loss = mean_loss
+            best_weights = module.state_dict()
+        else:
+            epochs_since_best += 1
+
+        tqdm.write(
+            f"[{datetime.now().strftime('%Y-%m-%d %H:%M:%S')}] Epoch {current_epoch} "
+            + f"Loss: {mean_loss:.3e} Patience: {epochs_since_best}/{patience}"
+        )
+        current_epoch += 1
+    module.load_state_dict(best_weights)
+    return module
+
+
+def test_resnet(dataset, data_loader, model, device):
+    import matplotlib.pyplot as plt
+
+    for mode, name in [(DataSplit.VAL, "val"), (DataSplit.TEST, ("test"))]:
+        plt.figure(figsize=(8, 8))
+        correct = 0
+        dataset.set_mode(mode)
+        confusion_matrix = np.zeros((N_CLASSES, N_CLASSES))
+        with torch.no_grad():
+            for x, y in tqdm(iter(data_loader), desc="Testing", total=len(data_loader)):
+                x, y = x.to(device), y.to(device)
+                with autocast():
+                    output = model(x)
+                if output.shape[1] > 1:
+                    output = torch.argmax(output, dim=1)
+                else:
+                    output = dataset.denormalize_label(output)
+                    output = torch.round(output)
+                if y.shape[1] > 1:
+                    y = torch.argmax(y, dim=1)
+                else:
+                    y = dataset.denormalize_label(y)
+                correct += torch.sum(output == y)
+                for pred, true in zip(output, y):
+                    confusion_matrix[int(true.item()), int(pred.item())] += 1
+            acc = correct / len(dataset)
+            tqdm.write(f"{name} accuracy: {acc}")
+        plt.imshow(confusion_matrix)
+        plt.xticks(np.arange(N_CLASSES))
+        plt.yticks(np.arange(N_CLASSES))
+        plt.ylabel("Ground truth")
+        plt.xlabel("Prediction")
+        for i in range(N_CLASSES):
+            for j in range(N_CLASSES):
+                plt.text(
+                    i, j, confusion_matrix[j, i], ha="center", va="center", color="w"
+                )
+        plt.title(name)
+        plt.savefig(f"{name}.png")
 
 
 if __name__ == "__main__":
     train_annotator()
+
     # import matplotlib.pyplot as plt
     # import numpy as np
 
@@ -323,18 +613,18 @@ if __name__ == "__main__":
     # train_labels = data.data[DataSplit.TRAIN]["labels"]
     # val_labels = data.data[DataSplit.VAL]["labels"]
     # test_labels = data.data[DataSplit.TEST]["labels"]
-    # train_freqs = [sum(np.array(train_labels) == k) for k in range(5)]
-    # val_freqs = [sum(np.array(val_labels) == k) for k in range(5)]
-    # test_freqs = [sum(np.array(test_labels) == k) for k in range(5)]
+    # train_freqs = [sum(np.array(train_labels) == k) for k in range(4)]
+    # val_freqs = [sum(np.array(val_labels) == k) for k in range(4)]
+    # test_freqs = [sum(np.array(test_labels) == k) for k in range(4)]
 
     # plt.subplot(311)
-    # plt.bar(range(5), train_freqs)
+    # plt.bar(range(4), train_freqs)
     # plt.title("Train split label distribution")
     # plt.subplot(312)
-    # plt.bar(range(5), val_freqs)
+    # plt.bar(range(4), val_freqs)
     # plt.title("Validation split label distribution")
     # plt.subplot(313)
-    # plt.bar(range(5), test_freqs)
+    # plt.bar(range(4), test_freqs)
     # plt.title("Test split label distribution")
     # plt.tight_layout()
     # plt.show()
