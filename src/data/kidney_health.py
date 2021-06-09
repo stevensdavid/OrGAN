@@ -92,8 +92,10 @@ class BaseKidneyHealth(AbstractDataset, ABC):
         self.data = self.load_data()
         self.min_label = 0
         self.max_label = 3
-        self.normalize_mean = [0.73835371, 0.54834542, 0.71608568]
-        self.normalize_std = [0.14926942, 0.1907891, 0.12789522]
+        # self.normalize_mean = [0.73835371, 0.54834542, 0.71608568]
+        # self.normalize_std = [0.14926942, 0.1907891, 0.12789522]
+        self.normalize_mean = [0.5, 0.5, 0.5]  # normalize to [-1,1]
+        self.normalize_std = [0.5, 0.5, 0.5]
         transformations = [
             transforms.Resize(image_size),
             transforms.ToTensor(),
@@ -145,7 +147,6 @@ class BaseKidneyHealth(AbstractDataset, ABC):
         else:
             label = torch.tensor(label)
             label = nn.functional.one_hot(label, num_classes=N_CLASSES)
-        # image = self.normalize(image)
         return image, label
 
     def _len(self) -> int:
