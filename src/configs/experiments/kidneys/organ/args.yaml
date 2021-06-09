@@ -17,3 +17,4 @@ ccgan_embedding_dim: 128
 discriminator_lr: 0.0002
 generator_lr: 0.0002
 optimizer: adam
+validation_class: data.kidney_health.KidneyPerformanceMeasurer

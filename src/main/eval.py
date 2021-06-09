@@ -74,11 +74,17 @@ def eval(args: Namespace):
 def eval_sweep(sweep_dir: str, batch_size: int, n_workers: int, device: torch.device):
     args = load_yaml(os.path.join(sweep_dir, "args.yaml"))
     dataset, data_shape = build_dataset(args)
+    if "validation_class" in args:
+        validator_class = locate(args["validation_class"])
+        data_config = load_yaml(args["data_config"])["kwargs"]
+        validator = validator_class(**data_config)
+    else:
+        validator = dataset
     label_transform, data_shape = get_label_transform(args, data_shape, device)
     generator = build_generator(args, data_shape, sweep_dir, device)
 
     with torch.no_grad():
-        evaluation = dataset.test_model(
+        evaluation = validator.test_model(
             generator.module, batch_size, n_workers, device, label_transform,
         )
     tqdm.write(str(evaluation))

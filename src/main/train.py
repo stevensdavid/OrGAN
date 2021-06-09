@@ -27,12 +27,21 @@ from torch.utils.data import DataLoader
 from tqdm import trange
 from util.cyclical_encoding import to_cyclical
 from util.dataclasses import DataclassExtensions, LabelDomain, TrainingConfig
-from util.enums import (DataSplit, FrequencyMetric, MultiGPUType,
-                        ReductionType, VicinityType)
+from util.enums import (
+    DataSplit,
+    FrequencyMetric,
+    MultiGPUType,
+    ReductionType,
+    VicinityType,
+)
 from util.logging import Logger
 from util.object_loader import build_from_yaml, load_yaml
-from util.pytorch_utils import (load_optimizer_weights, save_optimizers,
-                                seed_worker, set_seeds)
+from util.pytorch_utils import (
+    load_optimizer_weights,
+    save_optimizers,
+    seed_worker,
+    set_seeds,
+)
 
 
 def parse_args() -> Tuple[Namespace, dict]:
@@ -91,6 +100,11 @@ def parse_args() -> Tuple[Namespace, dict]:
         help="Makes G lr x times higher than discriminator",
     )
     parser.add_argument("--interpolation_steps", type=int, default=10)
+    parser.add_argument(
+        "--validation_class",
+        type=str,
+        help="Module-path to class that implements performance metrics",
+    )
     args, unknown = parser.parse_known_args()
     hyperparams = {}
     if unknown:
@@ -239,6 +253,13 @@ def train(gpu: int, args: Namespace, train_conf: TrainingConfig):
         sampler=val_sampler if use_ddp else None,
         worker_init_fn=seed_worker,
     )
+    if args.validation_class:
+        validator_class = locate(args.validation_class)
+        data_config = load_yaml(args.data_config)["kwargs"]
+        validator = validator_class(**data_config)
+    else:
+        validator = val_dataset
+
     optimizer_arg = hyperparams.get("optimizer", "adam")
     if optimizer_arg == "adam":
         optimizer = lambda params, lr: optim.Adam(params, lr, betas=[0.5, 0.999])
@@ -468,7 +489,7 @@ def train(gpu: int, args: Namespace, train_conf: TrainingConfig):
                             generated = model.module.generator.transform(
                                 cuda_samples, generator_targets
                             )
-                        performance = val_dataset.performance(
+                        performance = validator.performance(
                             cuda_samples,
                             real_labels,
                             generated,

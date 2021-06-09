@@ -233,57 +233,14 @@ class KidneyPerformance(DataclassExtensions):
     mse: float
 
 
-class MachineAnnotated(BaseKidneyHealth):
-    def __init__(
-        self,
-        root: str,
-        device: torch.device,
-        image_size=256,
-        train: bool = True,
-        **kwargs,
-    ) -> None:
+class KidneyPerformanceMeasurer:
+    def __init__(self, root: str, device: torch.device, image_size: int) -> None:
         annotator_weights = annotator_path(root)
-        if os.path.exists(annotator_weights):
-            self.classifier = MachineAnnotator.from_weights(annotator_weights)
-            self.classifier.to(device)
-        else:
-            raise ValueError(
-                "Annotator not found. Please run this module with python -m "
-                + "data.kidney_health to train one."
-            )
-        super().__init__(root=root, image_size=image_size, train=train)
+        self.classifier = MachineAnnotator.from_weights(annotator_weights)
+        self.classifier.to(device)
+        self.classifier = nn.DataParallel(self.classifier)
         self.test_set = ManuallyAnnotated(root, image_size, train=False)
         self.test_set.set_mode(DataSplit.TEST)
-
-    def load_data(self) -> Dict[str, List[Union[float, str]]]:
-        metadata_path = os.path.join(self.root, "annotations.json")
-        with open(metadata_path, "r") as f:
-            metadata = json.load(f)
-        all_images = [x["image"] for x in metadata]
-        all_labels = [x["label"] for x in metadata]
-        all_images, all_labels = pairwise_deterministic_shuffle(all_images, all_labels)
-        n_images = len(all_labels)
-        train_val_split = 0.8
-        split_idx = round(train_val_split * n_images)
-        train_images, train_labels = all_images[:split_idx], all_labels[:split_idx]
-        val_images, val_labels = all_images[split_idx:], all_labels[split_idx:]
-
-        # Test split is taken from manual annotations
-        data = {
-            DataSplit.TRAIN: {"images": train_images, "labels": train_labels},
-            DataSplit.VAL: {"images": val_images, "labels": val_labels},
-        }
-        return data
-
-    def _len(self) -> int:
-        if self.mode is DataSplit.TEST:
-            return self.test_set._len()
-        return super()._len()
-
-    def _getitem(self, index):
-        if self.mode is DataSplit.TEST:
-            return self.test_set._getitem(index)
-        return super()._getitem(index)
 
     def performance(
         self,
@@ -343,6 +300,68 @@ class MachineAnnotated(BaseKidneyHealth):
                 else:
                     total_performance.extend(batch_performance)
         return total_performance.map(Metric.from_list)
+
+
+class MachineAnnotated(BaseKidneyHealth):
+    def __init__(
+        self,
+        root: str,
+        device: torch.device,
+        image_size=256,
+        train: bool = True,
+        **kwargs,
+    ) -> None:
+        super().__init__(root=root, image_size=image_size, train=train)
+
+    def load_data(self) -> Dict[str, List[Union[float, str]]]:
+        metadata_path = os.path.join(self.root, "annotations.json")
+        with open(metadata_path, "r") as f:
+            metadata = json.load(f)
+        all_images = [x["image"] for x in metadata]
+        all_labels = [x["label"] for x in metadata]
+        all_images, all_labels = pairwise_deterministic_shuffle(all_images, all_labels)
+        n_images = len(all_labels)
+        train_val_split = 0.8
+        split_idx = round(train_val_split * n_images)
+        train_images, train_labels = all_images[:split_idx], all_labels[:split_idx]
+        val_images, val_labels = all_images[split_idx:], all_labels[split_idx:]
+
+        # Test split is taken from manual annotations
+        data = {
+            DataSplit.TRAIN: {"images": train_images, "labels": train_labels},
+            DataSplit.VAL: {"images": val_images, "labels": val_labels},
+        }
+        return data
+
+    def _len(self) -> int:
+        if self.mode is DataSplit.TEST:
+            return self.test_set._len()
+        return super()._len()
+
+    def _getitem(self, index):
+        if self.mode is DataSplit.TEST:
+            return self.test_set._getitem(index)
+        return super()._getitem(index)
+
+    def performance(
+        self,
+        real_images,
+        real_labels,
+        fake_images,
+        fake_labels,
+        reduction: ReductionType,
+    ) -> dict:
+        raise NotImplementedError("Use KidneyPerformanceMeasurer")
+
+    def test_model(
+        self,
+        generator: AbstractGenerator,
+        batch_size: int,
+        n_workers: int,
+        device: torch.device,
+        label_transform: Callable[[torch.Tensor], torch.Tensor],
+    ) -> DataclassType:
+        raise NotImplementedError("Use KidneyPerformanceMeasurer")
 
 
 class KidneyData(AbstractDataset):
