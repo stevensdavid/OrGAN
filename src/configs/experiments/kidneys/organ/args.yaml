@@ -8,7 +8,7 @@ model: models.ccgan.CCStarGAN
 model_hyperparams: configs/models/hires_stargan.yaml
 n_nodes: 1
 n_gpus: 2
-n_workers: 5
+n_workers: 0
 node_rank: 0
 embed_generator: true
 embed_discriminator: true
