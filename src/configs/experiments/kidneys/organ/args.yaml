@@ -1,5 +1,5 @@
 epochs: 300
-batch_size: 90
+batch_size: 14
 data_config: configs/datasets/kidneys.yaml
 checkpoint_dir: /storage/checkpoints
 experiment_name: Kidneys
