@@ -7,6 +7,7 @@ import numpy as np
 import torch
 from PIL import Image
 from torch import Tensor, nn
+from torchvision.transforms.functional import normalize
 
 
 class ConditionalInstanceNorm2d(nn.Module):
@@ -33,6 +34,16 @@ def ndarray_hash(x: np.ndarray) -> int:
 
 def img_to_numpy(x: torch.Tensor) -> np.ndarray:
     return np.moveaxis(x.cpu().numpy(), 0, -1)
+
+
+def invert_normalize(x: torch.Tensor, mean: List[float], std: List[float]):
+    if len(x.shape) == 3:
+        x = x.unsqueeze(0)
+    x = x.clone().movedim(1, -1)
+    mean = torch.as_tensor(mean)
+    std = torch.as_tensor(std)
+    x = x * std + mean
+    return x.movedim(-1, 1).squeeze()
 
 
 def relativistic_loss(real_sources, real_average, fake_sources, sample_weights):

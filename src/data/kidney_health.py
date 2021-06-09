@@ -26,12 +26,18 @@ from util.dataclasses import (
     DataclassExtensions,
     DataclassType,
     DataShape,
+    GeneratedExamples,
     LabelDomain,
     Metric,
 )
 from util.enums import DataSplit, ReductionType
 from util.model_trainer import train_model
-from util.pytorch_utils import pairwise_deterministic_shuffle, seed_worker, set_seeds
+from util.pytorch_utils import (
+    invert_normalize,
+    pairwise_deterministic_shuffle,
+    seed_worker,
+    set_seeds,
+)
 
 from data.abstract_classes import AbstractDataset
 
@@ -86,13 +92,12 @@ class BaseKidneyHealth(AbstractDataset, ABC):
         self.data = self.load_data()
         self.min_label = 0
         self.max_label = 3
+        self.normalize_mean = [0.73835371, 0.54834542, 0.71608568]
+        self.normalize_std = [0.14926942, 0.1907891, 0.12789522]
         transformations = [
             transforms.Resize(image_size),
             transforms.ToTensor(),
-            transforms.Normalize(
-                mean=[0.73835371, 0.54834542, 0.71608568],
-                std=[0.14926942, 0.1907891, 0.12789522],
-            ),
+            transforms.Normalize(mean=self.normalize_mean, std=self.normalize_std,),
         ]
         self.train_transform = transforms.Compose(
             [
@@ -155,6 +160,31 @@ class BaseKidneyHealth(AbstractDataset, ABC):
 
     def label_domain(self) -> Optional[LabelDomain]:
         return LabelDomain(0, 1)
+
+    def denormalize_transform(self, x: torch.Tensor) -> torch.Tensor:
+        return invert_normalize(x, self.normalize_mean, self.normalize_std)
+
+    def stitch_examples(
+        self, real_images, real_labels, fake_images, fake_labels
+    ) -> List[GeneratedExamples]:
+        real_images = self.denormalize_transform(real_images)
+        fake_images = self.denormalize_transform(fake_images)
+        return super().stitch_examples(
+            real_images, real_labels, fake_images, fake_labels
+        )
+
+    def stitch_interpolations(
+        self,
+        source_image: torch.Tensor,
+        interpolations: torch.Tensor,
+        source_label: float,
+        domain: LabelDomain,
+    ) -> GeneratedExamples:
+        source_image = self.denormalize_transform(source_image)
+        interpolations = self.denormalize_transform(interpolations)
+        return super().stitch_interpolations(
+            source_image, interpolations, source_label, domain
+        )
 
 
 class ManuallyAnnotated(BaseKidneyHealth):
@@ -241,6 +271,7 @@ class KidneyPerformanceMeasurer:
         self.classifier = nn.DataParallel(self.classifier)
         self.test_set = ManuallyAnnotated(root, image_size, train=False)
         self.test_set.set_mode(DataSplit.TEST)
+        self.device = device
 
     def performance(
         self,
@@ -252,6 +283,7 @@ class KidneyPerformanceMeasurer:
     ) -> dict:
         with torch.no_grad(), autocast():
             preds = self.classifier(fake_images)
+        preds = preds.cpu()
         abs_error = torch.abs(fake_labels - preds)
         squared_error = (fake_labels - preds) ** 2
         return_values = KidneyPerformance(abs_error, squared_error)
