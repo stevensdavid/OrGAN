@@ -269,7 +269,6 @@ class KidneyPerformanceMeasurer:
         annotator_weights = annotator_path(root)
         self.classifier = MachineAnnotator.from_weights(annotator_weights)
         self.classifier.to(device)
-        self.classifier = nn.DataParallel(self.classifier)
         self.test_set = ManuallyAnnotated(root, image_size, train=False)
         self.test_set.set_mode(DataSplit.TEST)
         self.device = device
@@ -282,9 +281,10 @@ class KidneyPerformanceMeasurer:
         fake_labels,
         reduction: ReductionType,
     ) -> dict:
+        fake_labels = fake_labels.to(self.device)
+        fake_images = fake_images.to(self.device)
         with torch.no_grad(), autocast():
             preds = self.classifier(fake_images)
-        preds = preds.cpu()
         abs_error = torch.abs(fake_labels - preds)
         squared_error = (fake_labels - preds) ** 2
         return_values = KidneyPerformance(abs_error, squared_error)
