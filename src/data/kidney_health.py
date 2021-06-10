@@ -284,7 +284,7 @@ class KidneyPerformanceMeasurer:
         fake_labels = fake_labels.to(self.device)
         fake_images = fake_images.to(self.device)
         with torch.no_grad(), autocast():
-            preds = self.classifier(fake_images)
+            preds = self.classifier(fake_images).squeeze()
         abs_error = torch.abs(fake_labels - preds)
         squared_error = (fake_labels - preds) ** 2
         return_values = KidneyPerformance(abs_error, squared_error)
