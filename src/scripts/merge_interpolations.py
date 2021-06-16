@@ -53,14 +53,26 @@ display_names = {
 }
 
 
-def add_image_to_plot(image, name, n_rows, idx, n_cols=1):
+def add_image_to_plot(image, name, n_rows, idx, n_cols=1, is_input=False):
     ax = plt.subplot(n_rows, n_cols, idx)
-    ax.imshow(image)
+    if is_input:
+        ax.imshow(image)
+    else:
+        ax.imshow(image, extent=[1, 10, 0, 1])
     if n_cols == 1 or idx % n_cols == 1:
         ax.set_title(name, x=-0.01, y=0, loc="right")
     elif idx % n_cols == 0:
         ax.set_title(name, x=1.01, y=0, loc="left")
-    ax.axis("off")
+    ax.get_yaxis().set_visible(False)
+    if not is_input and idx == n_rows * n_cols:
+        if "clustered_hsv" in args.project_root:
+            ax.set_xticks(np.linspace(1.5, 9.5, endpoint=True, num=10))
+            ax.set_xticklabels(["o", "x"] * 5)
+        elif "quickdraw" in args.project_root:
+            ax.set_xticks([1.5, 5, 9.5])
+            ax.set_xticklabels(["0 (Cat)", "0.5", "1 (Dog)"])
+    else:
+        ax.get_xaxis().set_visible(False)
 
 
 n_models = interpolations.shape[0]
@@ -72,7 +84,7 @@ for image_idx in range(n_samples):
     input_image = interpolations[
         0, image_idx * model_step : (image_idx * model_step) + res, :res
     ]
-    add_image_to_plot(input_image, "Input", n_models + 2, 1)
+    add_image_to_plot(input_image, "Input", n_models + 2, 1, is_input=True)
     outputs = interpolations[
         :, image_idx * model_step : (image_idx * model_step) + res, res:
     ]
@@ -85,40 +97,39 @@ for image_idx in range(n_samples):
             0, image_idx * model_step + res : (image_idx + 1) * model_step, res:
         ]
         add_image_to_plot(ground_truth, "Ground truth", n_rows, n_rows)
-    # plt.tight_layout()
     plt.savefig(
         os.path.join(args.project_root, f"interp_{image_idx}.png"),
         dpi=600,
         bbox_inches="tight",
     )
 
-plt.figure(image_idx + 1, figsize=[6.4 * n_samples / 2, 4.8])
-n_rows = n_models if args.no_gt else n_models + 1
-for model_idx in range(n_models):
-    model_name = os.path.split(os.path.dirname(paths[model_idx]))[1]
-    for image_idx in range(n_samples):
-        output = interpolations[
-            model_idx, image_idx * model_step : (image_idx * model_step) + res, res:
-        ]
-        add_image_to_plot(
-            output,
-            display_names[model_name],
-            n_rows,
-            model_idx * n_samples + image_idx + 1,
-            n_cols=n_samples,
-        )
-if not args.no_gt:
-    for image_idx in range(n_samples):
-        ground_truth = interpolations[
-            0, image_idx * model_step + res : (image_idx + 1) * model_step, res:
-        ]
-        add_image_to_plot(
-            ground_truth,
-            "Ground truth",
-            n_rows,
-            n_models * n_samples + image_idx + 1,
-            n_cols=n_samples,
-        )
-# plt.subplots_adjust(wspace=0.01, hspace=0)
-plt.tight_layout()
-plt.savefig(os.path.join(args.project_root, "interp_all.png"), dpi=300)
+# plt.figure(image_idx + 1, figsize=[6.4 * n_samples / 2, 4.8])
+# n_rows = n_models if args.no_gt else n_models + 1
+# for model_idx in range(n_models):
+#     model_name = os.path.split(os.path.dirname(paths[model_idx]))[1]
+#     for image_idx in range(n_samples):
+#         output = interpolations[
+#             model_idx, image_idx * model_step : (image_idx * model_step) + res, res:
+#         ]
+#         add_image_to_plot(
+#             output,
+#             display_names[model_name],
+#             n_rows,
+#             model_idx * n_samples + image_idx + 1,
+#             n_cols=n_samples,
+#         )
+# if not args.no_gt:
+#     for image_idx in range(n_samples):
+#         ground_truth = interpolations[
+#             0, image_idx * model_step + res : (image_idx + 1) * model_step, res:
+#         ]
+#         add_image_to_plot(
+#             ground_truth,
+#             "Ground truth",
+#             n_rows,
+#             n_models * n_samples + image_idx + 1,
+#             n_cols=n_samples,
+#         )
+# # plt.subplots_adjust(wspace=0.01, hspace=0)
+# plt.tight_layout()
+# plt.savefig(os.path.join(args.project_root, "interp_all.png"), dpi=300)
