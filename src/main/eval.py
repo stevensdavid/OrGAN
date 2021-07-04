@@ -178,9 +178,10 @@ def sample_sweep(sweep_dir: str, batch_size: int, n_workers: int, device: torch.
         return outputs
 
     interpolations = []
+    steps = 9 if "clustered_hsv" in sweep_dir else 10
     for idx in range(10):
         image, label = dataset[idx]
-        interpolation = interpolate(image, domain.min, domain.max, steps=10).cpu()
+        interpolation = interpolate(image, domain.min, domain.max, steps=steps).cpu()
         stitched_image = dataset.stitch_interpolations(
             image, interpolation, label, domain
         ).image

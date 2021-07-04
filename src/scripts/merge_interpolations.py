@@ -66,8 +66,8 @@ def add_image_to_plot(image, name, n_rows, idx, n_cols=1, is_input=False):
     ax.get_yaxis().set_visible(False)
     if not is_input and idx == n_rows * n_cols:
         if "clustered_hsv" in args.project_root:
-            ax.set_xticks(np.linspace(1.5, 9.5, endpoint=True, num=10))
-            ax.set_xticklabels(["o", "x"] * 5)
+            ax.set_xticks(np.linspace(1.5, 9.5, endpoint=True, num=9))
+            ax.set_xticklabels((["o", "x"] * 5)[:-1])
         elif "quickdraw" in args.project_root:
             ax.set_xticks([1.5, 5, 9.5])
             ax.set_xticklabels(["0 (Cat)", "0.5", "1 (Dog)"])
