@@ -467,7 +467,7 @@ def train_annotator():
     if os.path.exists(checkpoint_path):
         annotator = MachineAnnotator.from_weights(checkpoint_path, mode=mode)
         annotator.to(device)
-        test_resnet(manual_annotations, loader, annotator, device)
+        # test_resnet(manual_annotations, loader, annotator, device)
     else:
         annotator = MachineAnnotator(pretrained_base=True, mode=mode)
         annotator = train_model(
@@ -483,8 +483,20 @@ def train_annotator():
         torch.save(annotator.state_dict(), checkpoint_path)
     annotation_file = annotation_path(args.root)
     if not os.path.exists(annotation_file):
+        unannotated = glob(f"{args.root}/unannotated/*.png")
+        manual = (
+            manual_annotations.data[DataSplit.TRAIN]["images"]
+            + manual_annotations.data[DataSplit.VAL]["images"]
+        )
+        manual = [os.path.join(args.root, x) for x in manual]
         create_annotations(
-            annotator, args, device, mode, manual_annotations, annotation_file
+            annotator,
+            args,
+            device,
+            mode,
+            manual_annotations,
+            annotation_file,
+            files=unannotated + manual,
         )
     with open(annotation_file, "r") as f:
         annotations = json.load(f)
@@ -498,15 +510,13 @@ def create_annotations(
     mode: str,
     dataset: BaseKidneyHealth,
     target_path: str,
+    files: List[str],
 ):
     print("Creating annotations")
     annotator.to(device)
     annotations = deque()
-    unannotated = glob(f"{args.root}/unannotated/*.png")
     n = args.batch_size
-    batches = [
-        unannotated[i * n : (i + 1) * n] for i in range((len(unannotated) + n - 1) // n)
-    ]
+    batches = [files[i * n : (i + 1) * n] for i in range((len(files) + n - 1) // n)]
     for image_batch in tqdm(batches, desc="Annotating"):
         images = []
         for image_path in image_batch:
@@ -524,10 +534,9 @@ def create_annotations(
             labels = torch.argmax(predictions, dim=1)
         predictions = predictions.to("cpu").numpy()
         for image_path, label in zip(image_batch, labels):
-            filename = os.path.split(image_path)[1]
-            annotations.append(
-                {"image": f"unannotated/{filename}", "label": label.item()}
-            )
+            dirname, filename = os.path.split(image_path)
+            folder = os.path.basename(dirname)
+            annotations.append({"image": f"{folder}/{filename}", "label": label.item()})
     with open(target_path, "w") as f:
         json.dump(list(annotations), f)
 
