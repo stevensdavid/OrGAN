@@ -1,4 +1,4 @@
-# Continuous Image-to-Image Translation Through Learning Fixed Points in GANs
+# Toward Ordinal Image-to-Image Translation with Generative Adversarial Networks
 
 This repository contains code for my degree project for the degree of MSc in Computer
 Science. 
