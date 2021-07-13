@@ -1,4 +1,4 @@
-name: OrGAN
+name: Non-embedded Discriminator
 project: kidneys
 command:
   - ${env}
@@ -6,7 +6,7 @@ command:
   - -m
   - ${program}
   - --args_file
-  - configs/experiments/kidneys/organ/args.yaml
+  - configs/experiments/kidneys/plain_discriminator/args.yaml
   - --log_hyperparams
 early_terminate:
   min_iter: 10
